@@ -1,7 +1,7 @@
 :root {
     /* Marca / Accion */
     --mm-color-brand: #F27F0D;
-    --mm-color-brand-cta: #B35E0A;
+    --mm-color-brand-cta: #F27F0D;
 
     /* Texto */
     --mm-text-title: #0F172A;
@@ -194,7 +194,7 @@ svg {
 
 .mobile-map-app {
     min-height: 100vh;
-    padding: 1rem;
+    padding: 0.5rem;
 }
 
 .mobile-map-app__flash {
@@ -209,8 +209,8 @@ svg {
 
 .mobile-map-app__shell {
     position: relative;
-    width: min(100%, 1120px);
-    min-height: calc(100vh - 2rem);
+    width: min(100%, 1440px);
+    min-height: calc(100vh - 1rem);
     margin: 0 auto;
     overflow: hidden;
     border: 1px solid var(--mm-surface);
@@ -377,7 +377,7 @@ svg {
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    padding: 2rem 1.5rem 1rem;
+    padding: 1.45rem 1.2rem 0.7rem;
 }
 
 .mobile-map-app__header-copy {
@@ -409,14 +409,14 @@ svg {
     padding: 0;
     background: transparent;
     color: var(--mm-text-title);
-    font-size: 1.85rem;
+    font-size: 1.5rem;
     font-weight: 900;
     letter-spacing: -0.06em;
 }
 
 .mobile-map-app__brand-button svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.95rem;
+    height: 0.95rem;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
@@ -430,13 +430,13 @@ svg {
     gap: 0.45rem;
     padding: 0;
     color: var(--mm-text-subtitle);
-    font-size: 1.22rem;
+    font-size: 1rem;
     font-weight: 800;
 }
 
 .mobile-map-app__pin {
-    width: 1rem;
-    height: 1rem;
+    width: 0.9rem;
+    height: 0.9rem;
     color: var(--mm-color-brand);
 }
 
@@ -512,8 +512,8 @@ svg {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3rem;
-    height: 3rem;
+    width: 2.5rem;
+    height: 2.5rem;
     border: none;
     border-radius: 999px;
     background: hsla(31, 90%, 50%, 0.1);
@@ -601,7 +601,7 @@ svg {
     position: absolute;
     left: 0;
     right: 0;
-    top: 5.4rem;
+    top: 4.5rem;
     z-index: 3;
     padding: 0 1rem;
 }
@@ -713,7 +713,7 @@ svg {
 .mobile-map-app__floating-controls {
     position: absolute;
     right: 1rem;
-    top: 8.6rem;
+    top: 7.2rem;
     z-index: 3;
     display: grid;
     gap: 0.75rem;
@@ -765,7 +765,7 @@ svg {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 1.25rem;
+    bottom: 0.85rem;
     z-index: 3;
     display: flex;
     gap: 1rem;
@@ -776,14 +776,14 @@ svg {
 
 .mobile-map-card,
 .mobile-map-app__empty-state {
-    flex: 0 0 calc(100% - 5.25rem);
+    flex: 0 0 calc(75% - 2.5rem);
     scroll-snap-align: center;
 }
 
 .mobile-map-card {
     overflow: hidden;
     border: 1px solid var(--mm-border);
-    border-radius: 28px;
+    border-radius: 22px;
     background: var(--mm-surface);
     box-shadow: 0 28px 54px rgba(15, 23, 42, 0.16);
     transition: transform 180ms ease, box-shadow 180ms ease;
@@ -797,7 +797,7 @@ svg {
 
 .mobile-map-card__media {
     position: relative;
-    height: 7.9rem;
+    height: 5.9rem;
     overflow: hidden;
 }
 
@@ -839,14 +839,14 @@ svg {
 
 .mobile-map-card__heart {
     position: absolute;
-    right: 1rem;
-    top: 1rem;
+    right: 0.78rem;
+    top: 0.78rem;
     z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.35rem;
-    height: 2.35rem;
+    width: 2rem;
+    height: 2rem;
     border: none;
     border-radius: 50%;
     background: var(--mm-surface);
@@ -861,16 +861,16 @@ svg {
 
 .mobile-map-card__source-badge {
     position: absolute;
-    left: 1rem;
-    top: 1rem;
+    left: 0.78rem;
+    top: 0.78rem;
     z-index: 2;
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    padding: 0.42rem 0.68rem;
+    padding: 0.32rem 0.56rem;
     background: rgba(255, 255, 255, 0.94);
     color: var(--mm-title);
-    font-size: 0.68rem;
+    font-size: 0.6rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -899,52 +899,52 @@ svg {
 
 .mobile-map-card__distance {
     position: absolute;
-    right: 1rem;
-    bottom: 1rem;
+    right: 0.78rem;
+    bottom: 0.78rem;
     z-index: 2;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.5rem 0.72rem;
+    padding: 0.38rem 0.58rem;
     border: 3px solid rgba(255, 255, 255, 0.85);
     border-radius: 50px;
     background: var(--mm-metric-distance);
     color: #fff;
-    font-size: 0.75rem;
+    font-size: 0.66rem;
     font-weight: 800;
 }
 
 .mobile-map-card__distance svg {
-    width: 0.84rem;
-    height: 0.84rem;
+    width: 0.72rem;
+    height: 0.72rem;
 }
 
 .mobile-map-card__media-copy {
     position: absolute;
-    left: 1.2rem;
-    bottom: 1rem;
+    left: 0.95rem;
+    bottom: 0.78rem;
     z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3rem;
-    height: 3rem;
+    width: 2.35rem;
+    height: 2.35rem;
     border: 4px solid rgba(255, 255, 255, 0.82);
     border-radius: 50%;
     background: rgba(15, 23, 42, 0.1);
     color: #fff;
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     font-weight: 800;
 }
 
 .mobile-map-card__body {
-    padding: 0.92rem 1rem 1rem;
+    padding: 0.72rem 0.82rem 0.82rem;
 }
 
 .mobile-map-card__body h3 {
     margin: 0 0 0.5rem;
     color: var(--mm-title);
-    font-size: 1.22rem;
+    font-size: 1rem;
     line-height: 1.1;
     letter-spacing: -0.04em;
 }
@@ -952,7 +952,7 @@ svg {
 .mobile-map-card__body p {
     margin: 0;
     color: var(--mm-text-subtitle);
-    font-size: 0.86rem;
+    font-size: 0.76rem;
     line-height: 1.4;
 }
 
@@ -961,17 +961,17 @@ svg {
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    margin-top: 0.78rem;
+    margin-top: 0.6rem;
 }
 
 .mobile-map-card__status {
     display: inline-flex;
     align-items: center;
     border-radius: 14px;
-    padding: 0.44rem 0.7rem;
+    padding: 0.34rem 0.56rem;
     background: hsla(145, 63%, 42%, 0.12);
     color: var(--mm-state-success-text);
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -997,13 +997,13 @@ svg {
     align-items: center;
     gap: 0.35rem;
     color: #d97706;
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     font-weight: 800;
 }
 
 .mobile-map-card__reviews svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.9rem;
+    height: 0.9rem;
     color: var(--mm-rating-star);
     fill: var(--mm-rating-star);
     stroke: var(--mm-rating-star);
@@ -1033,7 +1033,7 @@ svg {
     grid-template-columns: repeat(5, 1fr);
     align-items: end;
     gap: 0.5rem;
-    padding: 0.95rem 1rem 1.35rem;
+    padding: 0.72rem 0.9rem 0.98rem;
     background: var(--mm-surface);
     border-top: 1px solid var(--mm-border);
 }
@@ -1042,19 +1042,19 @@ svg {
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.32rem;
     border: none;
     background: transparent;
     color: #94a3b8;
     text-decoration: none;
-    font-size: 0.72rem;
+    font-size: 0.6rem;
     font-weight: 800;
     text-transform: uppercase;
 }
 
 .mobile-map-app__nav-item svg {
-    width: 1.95rem;
-    height: 1.95rem;
+    width: 2.15rem;
+    height: 2.15rem;
 }
 
 .mobile-map-app__nav-item.is-active {
@@ -1062,16 +1062,16 @@ svg {
 }
 
 .mobile-map-app__nav-item--center {
-    transform: translateY(-1.7rem);
+    transform: translateY(-1.35rem);
 }
 
 .mobile-map-app__nav-core {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 4.7rem;
-    height: 4.7rem;
-    border: 8px solid var(--mm-surface);
+    width: 4rem;
+    height: 4rem;
+    border: 7px solid var(--mm-surface);
     border-radius: 50%;
     background: var(--mm-color-brand-cta);
     color: #fff;
@@ -1079,8 +1079,8 @@ svg {
 }
 
 .mobile-map-app__nav-core svg {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.92rem;
+    height: 1.92rem;
 }
 
 .map-shell__canvas-empty {
@@ -1232,17 +1232,17 @@ svg {
 
 @media (min-width: 860px) {
     .mobile-map-app {
-        display: grid;
-        place-items: center;
-        padding: 2rem;
+        display: block;
+        padding: 0.75rem 1rem;
     }
 
     .mobile-map-app__shell {
-        min-height: 860px;
+        min-height: calc(100vh - 1.5rem);
+        border-radius: 24px;
     }
 
     .mobile-map-app__header {
-        padding: 2rem 2rem 1rem;
+        padding: 1.4rem 1.6rem 0.7rem;
     }
 
     .mobile-map-app__status-pill {
@@ -1263,12 +1263,12 @@ svg {
 
     .mobile-map-app__cards-rail {
         gap: 1.1rem;
-        padding: 0 2rem;
+        padding: 0 1.6rem;
     }
 
     .mobile-map-card,
     .mobile-map-app__empty-state {
-        flex-basis: min(360px, calc(50% - 0.6rem));
+        flex-basis: min(270px, calc(33.333% - 0.8rem));
     }
 }
 
@@ -1286,7 +1286,7 @@ svg {
 
     .mobile-map-card,
     .mobile-map-app__empty-state {
-        flex-basis: calc(100% - 2.25rem);
+        flex-basis: calc(75% - 1rem);
     }
 
 }

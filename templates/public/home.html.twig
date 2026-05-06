@@ -24,13 +24,14 @@
         <section
             class="mobile-map-app__shell"
             data-controller="map-shell"
-            data-action="click@window->map-shell#closeNotificationsOnOutsideClick"
-            data-action="click@window->map-shell#closeLocationSwitcherOnOutsideClick"
+            data-action="click@window->map-shell#closeNotificationsOnOutsideClick click@window->map-shell#closeLocationSwitcherOnOutsideClick"
             data-map-shell-feed-url-value="{{ path('public_api_map_feed') }}"
             data-map-shell-authenticated-value="{{ is_authenticated ? 'true' : 'false' }}"
             data-map-shell-favorites-url-value="{% if is_authenticated %}{{ path('public_api_favorites_collection') }}{% endif %}"
             data-map-shell-addresses-url-value="{% if is_authenticated %}{{ path('public_api_addresses_collection') }}{% endif %}"
             data-map-shell-google-maps-api-key-value="{{ google_maps_api_key }}"
+            data-map-shell-claim-url-value="{{ path('public_claim_location') }}"
+            data-map-shell-event-log-url-value="{{ path('public_api_interactions_log') }}"
             data-map-shell-walkthrough-enabled-value="{{ walkthrough_enabled ? 'true' : 'false' }}"
             data-map-shell-logo-url-value="{{ logo_url }}"
             data-map-shell-initial-favorites-value='{{ favorite_location_ids|json_encode|raw }}'
@@ -119,107 +120,259 @@
                 </div>
             </header>
 
-            <div class="mobile-map-app__map-stage">
-                <div class="map-shell__canvas" data-map-shell-target="canvas"></div>
-
-                <div class="mobile-map-app__status-pill">
-                    <span data-map-shell-target="status">Cargando feed canonico...</span>
-                    <strong data-map-shell-target="count">{{ locations|length }}</strong>
-                </div>
-
-                <div class="map-shell__canvas-note" data-map-shell-target="canvasNote">
-                    Intentando cargar Google Maps...
-                </div>
-
-                <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRow"></div>
-
-                <div class="mobile-map-app__floating-controls">
-                    <div class="mobile-map-app__zoom-stack">
-                        <button type="button" class="mobile-map-app__control-button" data-action="map-shell#zoomIn" aria-label="Acercar">+</button>
-                        <button type="button" class="mobile-map-app__control-button" data-action="map-shell#zoomOut" aria-label="Alejar">-</button>
+            <section class="mobile-map-app__explore-shell" data-map-shell-target="exploreSection">
+                <section class="mobile-map-app__explore-toolbar">
+                    <div class="mobile-map-app__mode-toggle">
+                        <button type="button" class="mobile-map-app__mode-button is-active" data-map-shell-target="mapModeButton" data-action="map-shell#setMapMode">Mapa</button>
+                        <button type="button" class="mobile-map-app__mode-button" data-map-shell-target="listModeButton" data-action="map-shell#setListMode">Listado</button>
                     </div>
-                    <button type="button" class="mobile-map-app__control-button is-accent" data-action="map-shell#detectLocation" aria-label="Detectar mi ubicacion">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 4v3" />
-                            <path d="M12 17v3" />
-                            <path d="M4 12h3" />
-                            <path d="M17 12h3" />
-                            <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-                            <path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
-                        </svg>
-                    </button>
-                </div>
+                    <p class="mobile-map-app__explore-caption">
+                        <strong>Explorar</strong>
+                        <span data-map-shell-target="status">Cargando feed canonico...</span>
+                    </p>
+                </section>
 
-                <div class="mobile-map-app__cards-rail" data-map-shell-target="list">
-                    {% if locations is empty %}
-                        <article class="mobile-map-app__empty-state">
-                            <strong>Sin locales por ahora</strong>
-                            <p>En cuanto el core devuelva puntos visibles, apareceran aqui.</p>
-                        </article>
-                    {% else %}
-                        {% for location in locations %}
-                            <article
-                                class="mobile-map-card {{ loop.first ? 'is-active' : '' }}"
-                                data-action="click->map-shell#focusLocation"
-                                data-location-id="{{ location.location_id }}"
-                                data-card-location-id="{{ location.location_id }}"
-                            >
-                                <div class="mobile-map-card__media mobile-map-card__media--{{ (location.location_id % 4) + 1 }}">
-                                    <button
-                                        type="button"
-                                        class="mobile-map-card__heart {{ location.location_id in favorite_location_ids ? 'is-active' : '' }}"
-                                        data-action="map-shell#toggleFavorite"
-                                        data-location-id="{{ location.location_id }}"
-                                        aria-label="Guardar favorito"
-                                    >
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M12 21s-7-4.4-9.2-8.5C.9 9.1 2.3 5 6.3 5c2.2 0 3.6 1.3 4.4 2.4C11.5 6.3 12.9 5 15.1 5c4 0 5.4 4.1 3.5 7.5C16.4 16.6 12 21 12 21Z" />
-                                        </svg>
-                                    </button>
-                                    <div class="mobile-map-card__distance">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M12 3.5 19 7v10l-7 3.5L5 17V7l7-3.5Z" />
-                                            <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
-                                        </svg>
-                                        {{ location.distance_meters is not null ? (location.distance_meters >= 1000 ? ((location.distance_meters / 1000)|number_format(1, '.', '')) ~ ' km' : location.distance_meters ~ ' m') : 'Cerca' }}
-                                    </div>
-                                    <div class="mobile-map-card__media-copy">
-                                        <span>{{ location.merchant_name|slice(0, 1)|upper }}</span>
-                                    </div>
-                                </div>
-                                <div class="mobile-map-card__body">
-                                    <h3>{{ location.location_name }}</h3>
-                                    <p>{{ location.short_address ?: 'Direccion pendiente' }}{% if location.merchant_name %} • {{ location.merchant_name }}{% endif %}</p>
-                                    <div class="mobile-map-card__meta">
-                                        <span class="mobile-map-card__status">{{ location.publication_state == 'public_visible' ? 'Visible' : 'Pendiente' }}</span>
-                                        <span class="mobile-map-card__reviews">
+                <div class="mobile-map-app__map-stage" data-map-shell-target="mapStage">
+                    <div class="map-shell__canvas" data-map-shell-target="canvas"></div>
+
+                    <div class="mobile-map-app__status-pill">
+                        <span data-map-shell-target="statusDuplicate">Cargando feed canonico...</span>
+                        <strong data-map-shell-target="count">{{ locations|length }}</strong>
+                    </div>
+
+                    <div class="map-shell__canvas-note" data-map-shell-target="canvasNote">
+                        Intentando cargar Google Maps...
+                    </div>
+
+                    <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRow"></div>
+
+                    <div class="mobile-map-app__floating-controls">
+                        <div class="mobile-map-app__zoom-stack">
+                            <button type="button" class="mobile-map-app__control-button" data-action="map-shell#zoomIn" aria-label="Acercar">+</button>
+                            <button type="button" class="mobile-map-app__control-button" data-action="map-shell#zoomOut" aria-label="Alejar">-</button>
+                        </div>
+                        <button type="button" class="mobile-map-app__control-button is-accent" data-action="map-shell#detectLocation" aria-label="Detectar mi ubicacion">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 4v3" />
+                                <path d="M12 17v3" />
+                                <path d="M4 12h3" />
+                                <path d="M17 12h3" />
+                                <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+                                <path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="mobile-map-app__cards-rail" data-map-shell-target="list">
+                        {% if locations is empty %}
+                            <article class="mobile-map-app__empty-state">
+                                <strong>Sin locales por ahora</strong>
+                                <p>En cuanto el core devuelva puntos visibles, apareceran aqui.</p>
+                            </article>
+                        {% else %}
+                            {% for location in locations %}
+                                <article
+                                    class="mobile-map-card {{ loop.first ? 'is-active' : '' }}"
+                                    data-action="click->map-shell#focusLocation"
+                                    data-location-id="{{ location.location_id }}"
+                                    data-card-location-id="{{ location.location_id }}"
+                                >
+                                    <div class="mobile-map-card__media mobile-map-card__media--{{ (location.location_id % 4) + 1 }}">
+                                        <button
+                                            type="button"
+                                            class="mobile-map-card__heart {{ location.location_id in favorite_location_ids ? 'is-active' : '' }}"
+                                            data-action="map-shell#toggleFavorite"
+                                            data-location-id="{{ location.location_id }}"
+                                            aria-label="Guardar favorito"
+                                        >
                                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 17.1 6.8 19.8l1-5.8-4.2-4.1 5.8-.8L12 3.8Z" />
+                                                <path d="M12 21s-7-4.4-9.2-8.5C.9 9.1 2.3 5 6.3 5c2.2 0 3.6 1.3 4.4 2.4C11.5 6.3 12.9 5 15.1 5c4 0 5.4 4.1 3.5 7.5C16.4 16.6 12 21 12 21Z" />
                                             </svg>
-                                            Sin reviews
+                                        </button>
+                                        <div class="mobile-map-card__distance">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M12 3.5 19 7v10l-7 3.5L5 17V7l7-3.5Z" />
+                                                <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
+                                            </svg>
+                                            {{ location.distance_meters is not null ? (location.distance_meters >= 1000 ? ((location.distance_meters / 1000)|number_format(1, '.', '')) ~ ' km' : location.distance_meters ~ ' m') : 'Cerca' }}
+                                        </div>
+                                        <div class="mobile-map-card__media-copy">
+                                            <span>{{ location.merchant_name|slice(0, 1)|upper }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="mobile-map-card__body">
+                                        <h3>{{ location.location_name }}</h3>
+                                        <p>{{ location.short_address ?: 'Direccion pendiente' }}{% if location.merchant_name %} • {{ location.merchant_name }}{% endif %}</p>
+                                        <div class="mobile-map-card__meta">
+                                            <span class="mobile-map-card__status">{{ location.publication_state == 'public_visible' ? 'Visible' : 'Pendiente' }}</span>
+                                            <span class="mobile-map-card__reviews">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 17.1 6.8 19.8l1-5.8-4.2-4.1 5.8-.8L12 3.8Z" />
+                                                </svg>
+                                                Sin reviews
+                                            </span>
                                         </span>
                                     </div>
-                                </div>
-                            </article>
-                        {% endfor %}
-                    {% endif %}
                 </div>
-            </div>
+                                </article>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <section class="mobile-map-app__explore-list is-hidden" data-map-shell-target="exploreList">
+                    <div class="mobile-map-app__explore-list-header">
+                        <strong>Locales en esta zona</strong>
+                        <span><span data-map-shell-target="countDuplicate">{{ locations|length }}</span> resultados</span>
+                    </div>
+                    <div class="mobile-map-app__explore-list-grid" data-map-shell-target="exploreListGrid">
+                        {% if locations is empty %}
+                            <article class="mobile-map-app__empty-state mobile-map-app__empty-state--list">
+                                <strong>Sin locales por ahora</strong>
+                                <p>En cuanto el core devuelva puntos visibles, apareceran aqui.</p>
+                            </article>
+                        {% endif %}
+                    </div>
+                </section>
+            </section>
+
+            <section class="mobile-map-app__panel is-hidden" data-map-shell-target="favoritesSection">
+                <div class="mobile-map-app__panel-head">
+                    <div>
+                        <span class="mobile-map-app__eyebrow">Tu colección</span>
+                        <h2>Favoritos</h2>
+                    </div>
+                    <span class="mobile-map-app__panel-count" data-map-shell-target="favoritesCount">0</span>
+                </div>
+                {% if not is_authenticated %}
+                    <article class="mobile-map-app__auth-card">
+                        <strong>Inicia sesión para guardar favoritos</strong>
+                        <p>Tus favoritos se guardan en tu cuenta para recuperarlos desde cualquier sesión.</p>
+                        <div class="mobile-map-app__auth-actions">
+                            <a href="{{ path('public_login') }}">Iniciar sesión</a>
+                            <a href="{{ path('public_register') }}">Crear cuenta</a>
+                        </div>
+                    </article>
+                {% endif %}
+                <div class="mobile-map-app__saved-list" data-map-shell-target="favoritesList"></div>
+            </section>
+
+            <section class="mobile-map-app__panel is-hidden" data-map-shell-target="addressesSection">
+                <div class="mobile-map-app__panel-head">
+                    <div>
+                        <span class="mobile-map-app__eyebrow">Ubicaciones guardadas</span>
+                        <h2>Mis ubis</h2>
+                    </div>
+                    <span class="mobile-map-app__panel-count" data-map-shell-target="addressesCount">0</span>
+                </div>
+                {% if not is_authenticated %}
+                    <article class="mobile-map-app__auth-card">
+                        <strong>Crea una cuenta para guardar tus ubicaciones</strong>
+                        <p>Las ubis quedan ligadas al usuario que las guardó y se pueden reutilizar desde el explorador.</p>
+                        <div class="mobile-map-app__auth-actions">
+                            <a href="{{ path('public_login') }}">Iniciar sesión</a>
+                            <a href="{{ path('public_register') }}">Crear cuenta</a>
+                        </div>
+                    </article>
+                {% else %}
+                    <form class="mobile-map-app__address-form" data-action="submit->map-shell#saveAddress">
+                        <div class="mobile-map-app__field-grid">
+                            <label>
+                                <span>Etiqueta</span>
+                                <input type="text" placeholder="Casa, oficina, punto fijo..." data-map-shell-target="addressLabelInput">
+                            </label>
+                            <label>
+                                <span>Ciudad</span>
+                                <input type="text" placeholder="Ciudad" data-map-shell-target="addressCityInput">
+                            </label>
+                            <label>
+                                <span>Estado</span>
+                                <input type="text" placeholder="Estado" data-map-shell-target="addressStateInput">
+                            </label>
+                            <label class="mobile-map-app__field-span">
+                                <span>Referencia</span>
+                                <input type="text" placeholder="Colonia, avenida, notas..." data-map-shell-target="addressReferenceInput">
+                            </label>
+                        </div>
+                        <div class="mobile-map-app__field-grid">
+                            <label>
+                                <span>Latitud</span>
+                                <input type="text" placeholder="19.432608" data-map-shell-target="addressLatInput">
+                            </label>
+                            <label>
+                                <span>Longitud</span>
+                                <input type="text" placeholder="-99.133209" data-map-shell-target="addressLngInput">
+                            </label>
+                        </div>
+                        <label class="mobile-map-app__checkbox-row">
+                            <input type="checkbox" data-map-shell-target="addressPrimaryInput">
+                            <span>Guardar como ubicación principal</span>
+                        </label>
+                        <div class="mobile-map-app__address-actions">
+                            <button type="button" class="mobile-map-app__ghost-button" data-action="map-shell#prefillCurrentCoordinates">Usar mi ubicación actual</button>
+                            <button type="submit" class="mobile-map-app__primary-button">Guardar ubi</button>
+                        </div>
+                        <p class="mobile-map-app__address-status" data-map-shell-target="addressStatus"></p>
+                    </form>
+                {% endif %}
+                <div class="mobile-map-app__saved-list" data-map-shell-target="addressesList"></div>
+            </section>
+
+            <section class="mobile-map-app__panel is-hidden" data-map-shell-target="profileSection">
+                <div class="mobile-map-app__panel-head">
+                    <div>
+                        <span class="mobile-map-app__eyebrow">Tu cuenta</span>
+                        <h2>Perfil</h2>
+                    </div>
+                </div>
+                {% if is_authenticated %}
+                    <article class="mobile-map-app__auth-card">
+                        <strong>{{ current_user.firstName }} {{ current_user.lastName }}</strong>
+                        <p>{{ current_user.email }}</p>
+                        <div class="mobile-map-app__meta-grid">
+                            <span>Favoritos: <strong data-map-shell-target="favoritesCountDuplicate">0</strong></span>
+                            <span>Mis ubis: <strong data-map-shell-target="addressesCountDuplicate">0</strong></span>
+                        </div>
+                    </article>
+                {% else %}
+                    <article class="mobile-map-app__auth-card">
+                        <strong>Tu perfil se activa al registrarte</strong>
+                        <p>Regístrate o inicia sesión para guardar favoritos, ubis y operar tu experiencia personal.</p>
+                        <div class="mobile-map-app__auth-actions">
+                            <a href="{{ path('public_login') }}">Iniciar sesión</a>
+                            <a href="{{ path('public_register') }}">Crear cuenta</a>
+                        </div>
+                    </article>
+                {% endif %}
+            </section>
+
+            <aside class="mobile-map-app__detail-sheet is-hidden" data-map-shell-target="detailSheet">
+                <div class="mobile-map-app__detail-backdrop" data-action="click->map-shell#closeDetailSheet"></div>
+                <div class="mobile-map-app__detail-card">
+                    <button type="button" class="mobile-map-app__detail-close" data-action="map-shell#closeDetailSheet" aria-label="Cerrar detalle">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6 6 18 18" />
+                            <path d="M18 6 6 18" />
+                        </svg>
+                    </button>
+                    <div class="mobile-map-app__detail-body" data-map-shell-target="detailSheetBody"></div>
+                </div>
+            </aside>
 
             <nav class="mobile-map-app__nav">
-                <a href="{{ path('public_home') }}" class="mobile-map-app__nav-item is-active">
+                <button type="button" class="mobile-map-app__nav-item is-active" data-map-shell-target="exploreTabButton" data-action="map-shell#showExploreSection">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 10.5 12 4l8 6.5V20H4v-9.5Z" />
                         <path d="M9.5 20v-5.5h5V20" />
                     </svg>
                     <span>Explorar</span>
-                </a>
-                <a href="#" class="mobile-map-app__nav-item">
+                </button>
+                <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="favoritesTabButton" data-action="map-shell#showFavoritesSection">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 21s-7-4.4-9.2-8.5C.9 9.1 2.3 5 6.3 5c2.2 0 3.6 1.3 4.4 2.4C11.5 6.3 12.9 5 15.1 5c4 0 5.4 4.1 3.5 7.5C16.4 16.6 12 21 12 21Z" />
                     </svg>
                     <span>Favoritos</span>
-                </a>
+                </button>
                 <button type="button" class="mobile-map-app__nav-item mobile-map-app__nav-item--center" data-action="map-shell#detectLocation">
                     <span class="mobile-map-app__nav-core">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -232,21 +385,21 @@
                         </svg>
                     </span>
                 </button>
-                <a href="#" class="mobile-map-app__nav-item">
+                <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="addressesTabButton" data-action="map-shell#showAddressesSection">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Z" />
                         <path d="M12 12.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                     </svg>
                     <span>Mis ubis</span>
-                </a>
-                <a href="#" class="mobile-map-app__nav-item">
+                </button>
+                <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="profileTabButton" data-action="map-shell#showProfileSection">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 22a9 9 0 1 0-9-9 9 9 0 0 0 9 9Z" />
                         <path d="M12 8.2a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z" />
                         <path d="M7.5 18.3a5.4 5.4 0 0 1 9 0" />
                     </svg>
                     <span>Perfil</span>
-                </a>
+                </button>
             </nav>
         </section>
     </main>

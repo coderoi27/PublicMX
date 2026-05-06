@@ -40,5 +40,17 @@ services:
         arguments:
             $coreApiBaseUrl: '%app.core_api_base_url%'
 
+    App\Service\Public\BlockedEmailDomainClient:
+        arguments:
+            $coreApiBaseUrl: '%app.core_api_base_url%'
+
+    App\Service\Public\LocationClaimClient:
+        arguments:
+            $coreApiBaseUrl: '%app.core_api_base_url%'
+
+    App\Service\Public\EventLogClient:
+        arguments:
+            $coreApiBaseUrl: '%app.core_api_base_url%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -7,18 +7,31 @@ namespace App\Controller\Security;
 use App\Entity\Public\PublicUser;
 use App\Entity\Public\PublicUserOtp;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class VerifyOtpController extends AbstractController
 {
     #[Route('/verify-otp', name: 'public_verify_otp', methods: ['POST'])]
-    public function __invoke(Request $request, EntityManagerInterface $entityManager): Response
+    public function __invoke(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        #[Autowire(service: 'limiter.public_verify_otp')] RateLimiterFactory $verifyOtpLimiter,
+    ): Response
     {
         $email = mb_strtolower(trim((string) $request->request->get('email')));
         $code = trim((string) $request->request->get('code'));
+        $limit = $verifyOtpLimiter->create(($request->getClientIp() ?? 'unknown') . '|' . $email)->consume(1);
+        if (!$limit->isAccepted()) {
+            return $this->render('security/public_verify_otp.html.twig', [
+                'email' => $email,
+                'error' => 'Alcanzaste el límite temporal de intentos OTP. Intenta más tarde.',
+            ], new Response('', 429));
+        }
 
         $otp = $entityManager->getRepository(PublicUserOtp::class)->findOneBy(
             ['targetEmail' => $email, 'purpose' => 'register_verify'],

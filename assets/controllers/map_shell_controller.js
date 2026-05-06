@@ -4,8 +4,25 @@ export default class extends Controller {
     static targets = [
         'canvas',
         'status',
+        'statusDuplicate',
         'count',
+        'countDuplicate',
         'list',
+        'mapStage',
+        'exploreList',
+        'exploreListGrid',
+        'mapModeButton',
+        'listModeButton',
+        'exploreSection',
+        'favoritesSection',
+        'addressesSection',
+        'profileSection',
+        'exploreTabButton',
+        'favoritesTabButton',
+        'addressesTabButton',
+        'profileTabButton',
+        'detailSheet',
+        'detailSheetBody',
         'heroLocation',
         'chipRow',
         'categoryChip',
@@ -44,6 +61,8 @@ export default class extends Controller {
         favoritesUrl: String,
         addressesUrl: String,
         googleMapsApiKey: String,
+        claimUrl: String,
+        eventLogUrl: String,
         walkthroughEnabled: Boolean,
         logoUrl: String,
         authenticated: Boolean,
@@ -61,12 +80,14 @@ export default class extends Controller {
         this.currentLocations = [];
         this.visibleLocations = [];
         this.currentFeedSource = 'canonical';
-        this.categoryDefinitions = {
-            taqueria: { label: 'Tacos' },
-            vegetariano: { label: 'Veggie' },
-            cafeteria: { label: 'Café' },
-            restaurante: { label: 'Comida' },
+        this.fallbackCategoryDefinitions = {
+            tacos: { label: 'Tacos', colorHex: '#F97316', iconKey: 'taco' },
+            veggie: { label: 'Veggie', colorHex: '#16A34A', iconKey: 'leaf' },
+            cafe: { label: 'Café', colorHex: '#8B5E3C', iconKey: 'coffee' },
+            comida: { label: 'Comida', colorHex: '#2563EB', iconKey: 'plate' },
         };
+        this.categoryCatalog = [];
+        this.categoryCatalogBySlug = new Map();
         this.selectedLocationId = null;
         this.activeCategoryFilter = 'all';
         this.map = null;
@@ -82,14 +103,19 @@ export default class extends Controller {
         this.userMarker = null;
         this.notificationsOpen = false;
         this.locationSwitcherOpen = false;
+        this.exploreMode = 'map';
+        this.activeSection = 'explore';
         this.placeDetailsCache = new Map();
         this.lastDiscoveryCenter = null;
         this.isDiscoveringPlaces = false;
         this.isSyncingMapViewport = false;
         this.currentLocationLabel = this.hasHeroLocationTarget ? this.heroLocationTarget.textContent.trim() : '';
+        this.restoreExploreMode();
         this.restorePersistedLocationContext();
         this.renderFavoritesSummary();
         this.renderAddressesSummary();
+        this.renderExploreMode();
+        this.renderActiveSection();
         const walkthroughIsActive = this.initializeWalkthrough();
         if (!walkthroughIsActive || this.hasUserCoordinates()) {
             this.loadFeed();
@@ -258,6 +284,43 @@ export default class extends Controller {
         this.renderLocationSwitcherState();
     }
 
+    showExploreSection() {
+        this.activeSection = 'explore';
+        this.renderActiveSection();
+        this.logInteraction('public_section_changed', 'ui_section', null, { section: 'explore' });
+    }
+
+    showFavoritesSection() {
+        this.activeSection = 'favorites';
+        this.renderActiveSection();
+        this.logInteraction('public_section_changed', 'ui_section', null, { section: 'favorites' });
+    }
+
+    showAddressesSection() {
+        this.activeSection = 'addresses';
+        this.renderActiveSection();
+        this.logInteraction('public_section_changed', 'ui_section', null, { section: 'addresses' });
+    }
+
+    showProfileSection() {
+        this.activeSection = 'profile';
+        this.renderActiveSection();
+        this.logInteraction('public_section_changed', 'ui_section', null, { section: 'profile' });
+    }
+
+    setMapMode() {
+        this.exploreMode = 'map';
+        this.persistExploreMode();
+        this.renderExploreMode();
+        this.refreshMapViewport();
+    }
+
+    setListMode() {
+        this.exploreMode = 'list';
+        this.persistExploreMode();
+        this.renderExploreMode();
+    }
+
     closeLocationSwitcherOnOutsideClick(event) {
         if (!this.locationSwitcherOpen || !this.hasLocationSwitcherTarget || !this.hasLocationSwitcherButtonTarget) {
             return;
@@ -276,8 +339,13 @@ export default class extends Controller {
         this.applyCoordinates(Number(lat), Number(lng));
         this.updateHeroLocation(label);
         await this.loadFeed();
+        this.activeSection = 'explore';
+        this.renderActiveSection();
         this.locationSwitcherOpen = false;
         this.renderLocationSwitcherState();
+        this.logInteraction('public_saved_address_selected', 'user_address', Number(event.currentTarget.dataset.addressId ?? 0) || null, {
+            label,
+        });
     }
 
     async focusLocation(event) {
@@ -298,6 +366,13 @@ export default class extends Controller {
 
         this.setSelectedLocation(locationKey);
         const enrichedLocation = await this.enrichLocationIfNeeded(location);
+        this.renderDetailSheet(enrichedLocation);
+        this.logInteraction('public_location_opened', 'location', Number(enrichedLocation.location_id) || null, {
+            source_type: enrichedLocation.source_type ?? null,
+            place_id: enrichedLocation.place_id ?? null,
+            location_key: locationKey,
+            mode: this.exploreMode,
+        });
 
         if (this.googleMapsReady && this.map) {
             this.focusMapLocation(enrichedLocation);
@@ -327,6 +402,7 @@ export default class extends Controller {
                 await this.requestJson(`${this.favoritesUrlValue}/${locationId}`, { method: 'DELETE' });
                 this.favoriteLocationIds = this.favoriteLocationIds.filter((id) => id !== locationId);
                 this.setStatus(`Local #${locationId} eliminado de favoritos.`);
+                this.logInteraction('public_favorite_removed', 'location', locationId, {});
             } else {
                 await this.requestJson(this.favoritesUrlValue, {
                     method: 'POST',
@@ -335,10 +411,12 @@ export default class extends Controller {
                 });
                 this.favoriteLocationIds = [...this.favoriteLocationIds, locationId];
                 this.setStatus(`Local #${locationId} guardado en favoritos.`);
+                this.logInteraction('public_favorite_added', 'location', locationId, {});
             }
 
             this.renderFavoritesSummary();
             this.syncFavoriteButtons();
+            this.refreshDetailSheet();
         } catch (error) {
             this.setStatus(error.message);
         } finally {
@@ -362,6 +440,8 @@ export default class extends Controller {
             this.renderFavoritesSummary();
             this.syncFavoriteButtons();
             this.setStatus(`Local #${locationId} eliminado de favoritos.`);
+            this.refreshDetailSheet();
+            this.logInteraction('public_favorite_removed', 'location', locationId, {});
         } catch (error) {
             this.setStatus(error.message);
         }
@@ -401,9 +481,44 @@ export default class extends Controller {
             this.resetAddressForm();
             this.setAddressStatus(`Dirección "${payload.label}" guardada correctamente.`);
             this.setStatus('Dirección guardada en tu cuenta.');
+            this.logInteraction('public_address_saved', 'user_address', null, payload);
         } catch (error) {
             this.setAddressStatus(error.message);
         }
+    }
+
+    async removeAddressFromList(event) {
+        if (!this.authenticatedValue) {
+            return;
+        }
+
+        const addressId = Number.parseInt(event.currentTarget.dataset.addressId ?? '', 10);
+        if (Number.isNaN(addressId)) {
+            return;
+        }
+
+        try {
+            await this.requestJson(`${this.addressesUrlValue}/${addressId}`, { method: 'DELETE' });
+            await this.refreshAddresses();
+            this.setAddressStatus('Ubicación eliminada.');
+            this.logInteraction('public_address_removed', 'user_address', addressId, {});
+        } catch (error) {
+            this.setAddressStatus(error.message);
+        }
+    }
+
+    prefillCurrentCoordinates() {
+        if (!this.hasUserCoordinates()) {
+            this.setAddressStatus('Primero detecta o selecciona una ubicación.');
+            return;
+        }
+
+        this.addressLatInputTarget.value = Number(this.latValue).toFixed(6);
+        this.addressLngInputTarget.value = Number(this.lngValue).toFixed(6);
+        if (!this.addressReferenceInputTarget.value.trim()) {
+            this.addressReferenceInputTarget.value = this.currentLocationLabel || 'Ubicación actual';
+        }
+        this.setAddressStatus('Coordenadas cargadas desde tu ubicación actual.');
     }
 
     async loadFeed() {
@@ -423,6 +538,7 @@ export default class extends Controller {
             });
 
             const payload = await response.json();
+            this.registerCategoryCatalog(payload.meta?.category_catalog ?? []);
             const canonicalLocations = Array.isArray(payload.data) ? payload.data : [];
             let locations = canonicalLocations;
             this.currentFeedSource = 'canonical';
@@ -442,11 +558,12 @@ export default class extends Controller {
             const selectedLocation = filteredLocations.find((location) => this.locationKey(location) === this.selectedLocationId) ?? filteredLocations[0] ?? null;
             this.selectedLocationId = selectedLocation ? this.locationKey(selectedLocation) : null;
 
-            this.countTarget.textContent = String(filteredLocations.length);
+            this.updateCounts(filteredLocations.length);
             this.renderList(filteredLocations);
             await this.renderCanvas(filteredLocations);
             this.syncFavoriteButtons();
             this.syncActiveCard();
+            this.refreshDetailSheet();
 
             if (payload.errors && payload.errors.length > 0) {
                 this.setStatus(payload.errors[0]);
@@ -481,7 +598,7 @@ export default class extends Controller {
             this.selectedLocationId = this.visibleLocations[0] ? this.locationKey(this.visibleLocations[0]) : null;
         }
 
-        this.countTarget.textContent = String(this.visibleLocations.length);
+        this.updateCounts(this.visibleLocations.length);
         this.renderList(this.visibleLocations);
         await this.renderCanvas(this.visibleLocations);
         this.syncFavoriteButtons();
@@ -492,16 +609,9 @@ export default class extends Controller {
     }
 
     renderList(locations) {
-        if (!this.hasListTarget) {
-            return;
-        }
-
-        if (locations.length === 0) {
-            this.listTarget.innerHTML = '<div class="map-shell__empty">Todavía no hay puntos visibles.</div>';
-            return;
-        }
-
-        this.listTarget.innerHTML = locations.map((location, index) => `
+        const markup = locations.length === 0
+            ? ''
+            : locations.map((location, index) => `
             <article
                 class="mobile-map-card ${this.locationKey(location) === this.selectedLocationId ? 'is-active' : ''}"
                 data-index="${index}"
@@ -526,6 +636,7 @@ export default class extends Controller {
                 <div class="mobile-map-card__body">
                     <h3>${this.escapeHtml(location.location_name ?? 'Sin nombre')}</h3>
                     <p>${this.escapeHtml(this.cardSubtitle(location))}</p>
+                    ${this.categoryTagMarkup(location)}
                     <div class="mobile-map-card__meta">
                         <span class="mobile-map-card__status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
                         <span class="mobile-map-card__reviews">
@@ -538,6 +649,18 @@ export default class extends Controller {
                 </div>
             </article>
         `).join('');
+
+        if (this.hasListTarget) {
+            this.listTarget.innerHTML = locations.length === 0
+                ? '<div class="map-shell__empty">Todavía no hay puntos visibles.</div>'
+                : markup;
+        }
+
+        if (this.hasExploreListGridTarget) {
+            this.exploreListGridTarget.innerHTML = locations.length === 0
+                ? '<article class="mobile-map-app__empty-state mobile-map-app__empty-state--list"><strong>No encontré locales en esta zona</strong><p>Ajusta la ubicación, mueve el mapa o cambia de categoría.</p></article>'
+                : markup;
+        }
     }
 
     async renderCanvas(locations, options = {}) {
@@ -561,7 +684,7 @@ export default class extends Controller {
             return locations;
         }
 
-        return locations.filter((location) => this.locationCategory(location) === this.activeCategoryFilter);
+        return locations.filter((location) => this.locationCategoryKey(location) === this.activeCategoryFilter);
     }
 
     renderCategoryChips(locations = this.currentLocations) {
@@ -575,14 +698,16 @@ export default class extends Controller {
         }
 
         this.chipRowTarget.innerHTML = categoryKeys.map((categoryKey) => {
-            const label = categoryKey === 'all'
-                ? 'Todos'
-                : (this.categoryDefinitions[categoryKey]?.label ?? categoryKey);
+            const label = categoryKey === 'all' ? 'Todos' : this.categoryDisplayName(categoryKey);
+            const chipStyle = categoryKey === 'all'
+                ? ''
+                : `style="--chip-accent:${this.escapeHtml(this.categoryColor(categoryKey))};"`;
 
             return `
                 <button
                     type="button"
                     class="mobile-map-app__chip ${categoryKey === this.activeCategoryFilter ? 'is-active' : ''}"
+                    ${chipStyle}
                     data-map-shell-target="categoryChip"
                     data-category-filter="${this.escapeHtml(categoryKey)}"
                     data-action="map-shell#applyCategoryFilter"
@@ -597,13 +722,18 @@ export default class extends Controller {
         const discoveredCategories = new Set();
 
         locations.forEach((location) => {
-            const category = this.locationCategory(location);
+            const category = this.locationCategoryKey(location);
             if (category !== 'all') {
                 discoveredCategories.add(category);
             }
         });
 
-        return ['all', ...Object.keys(this.categoryDefinitions).filter((key) => discoveredCategories.has(key))];
+        const orderedDiscovered = this.categoryCatalog
+            .map((category) => String(category.slug))
+            .filter((slug) => discoveredCategories.has(slug));
+        const remainingFallback = [...discoveredCategories].filter((slug) => !orderedDiscovered.includes(slug));
+
+        return ['all', ...orderedDiscovered, ...remainingFallback];
     }
 
     shouldFetchGooglePlaces() {
@@ -628,6 +758,12 @@ export default class extends Controller {
     }
 
     isSamePhysicalLocation(left, right) {
+        const leftExternalKey = left.external_source_key ?? left.place_id ?? null;
+        const rightExternalKey = right.external_source_key ?? right.place_id ?? null;
+        if (leftExternalKey && rightExternalKey && String(leftExternalKey) === String(rightExternalKey)) {
+            return true;
+        }
+
         const leftLat = Number(left.lat);
         const leftLng = Number(left.lng);
         const rightLat = Number(right.lat);
@@ -659,10 +795,10 @@ export default class extends Controller {
                 <button
                     type="button"
                     class="map-shell__pin"
-                    style="left:${x}%; top:${y}%;"
+                    style="left:${x}%; top:${y}%; background:${this.escapeHtml(this.categoryColor(this.locationCategoryKey(location)))};"
                     title="${location.location_name ?? 'Local'}"
                 >
-                    <span>${index + 1}</span>
+                    <span>${this.escapeHtml(this.markerLabelText(location) || String(index + 1))}</span>
                 </button>
             `;
         }).join('');
@@ -675,6 +811,19 @@ export default class extends Controller {
 
     setStatus(message) {
         this.statusTarget.textContent = message;
+        if (this.hasStatusDuplicateTarget) {
+            this.statusDuplicateTarget.textContent = message;
+        }
+    }
+
+    updateCounts(count) {
+        const normalized = String(count);
+        if (this.hasCountTarget) {
+            this.countTarget.textContent = normalized;
+        }
+        if (this.hasCountDuplicateTarget) {
+            this.countDuplicateTarget.textContent = normalized;
+        }
     }
 
     async refreshAddresses() {
@@ -701,11 +850,16 @@ export default class extends Controller {
             this.favoritesListTarget.innerHTML = this.favoriteLocationIds
                 .slice()
                 .sort((left, right) => right - left)
-                .map((locationId) => `
+                .map((locationId) => {
+                    const location = this.currentLocations.find((candidate) => Number(candidate.location_id) === locationId) ?? null;
+                    const title = location?.location_name ?? `Local #${locationId}`;
+                    const subtitle = location ? this.cardSubtitle(location) : 'Guardado desde la exploración pública.';
+
+                    return `
                     <article class="public-home__saved-row">
                         <div>
-                            <strong>Local #${locationId}</strong>
-                            <p>Guardado desde la exploración pública.</p>
+                            <strong>${this.escapeHtml(title)}</strong>
+                            <p>${this.escapeHtml(subtitle)}</p>
                         </div>
                         <button
                             type="button"
@@ -716,7 +870,8 @@ export default class extends Controller {
                             Quitar
                         </button>
                     </article>
-                `)
+                `;
+                })
                 .join('');
         }
     }
@@ -742,7 +897,28 @@ export default class extends Controller {
                         <strong>${address.label ?? 'Sin etiqueta'}</strong>
                         <p>${this.addressLine(address)}</p>
                     </div>
-                    ${address.is_primary ? '<span class="public-home__badge">Principal</span>' : ''}
+                    <div class="public-home__saved-actions">
+                        ${address.is_primary ? '<span class="public-home__badge">Principal</span>' : ''}
+                        ${address.latitude && address.longitude ? `<button
+                            type="button"
+                            class="public-home__inline-button"
+                            data-action="click->map-shell#selectSavedAddress"
+                            data-address-id="${this.escapeHtml(String(address.id ?? ''))}"
+                            data-lat="${this.escapeHtml(String(address.latitude ?? ''))}"
+                            data-lng="${this.escapeHtml(String(address.longitude ?? ''))}"
+                            data-label="${this.escapeHtml(address.label ?? 'Ubicación guardada')}"
+                        >
+                            Usar
+                        </button>` : ''}
+                        <button
+                            type="button"
+                            class="public-home__inline-button"
+                            data-action="click->map-shell#removeAddressFromList"
+                            data-address-id="${this.escapeHtml(String(address.id ?? ''))}"
+                        >
+                            Quitar
+                        </button>
+                    </div>
                 </article>
             `).join('');
         }
@@ -843,6 +1019,8 @@ export default class extends Controller {
                 position,
                 title: location.location_name ?? 'Local',
                 animation: google.maps.Animation.DROP,
+                icon: this.markerIcon(google, location),
+                label: this.markerLabel(location),
             });
 
             marker.addListener('click', async () => {
@@ -929,6 +1107,7 @@ export default class extends Controller {
             map: this.map,
         });
         this.setStatus(`Mostrando ${location.location_name ?? 'local seleccionado'} en el mapa.`);
+        this.renderDetailSheet(location);
     }
 
     initializeMapDiscoveryListener(google) {
@@ -996,11 +1175,12 @@ export default class extends Controller {
                 : 'places_fallback';
             this.renderCategoryChips(mergedLocations);
             this.visibleLocations = this.filteredLocations(mergedLocations);
-            this.countTarget.textContent = String(this.visibleLocations.length);
+            this.updateCounts(this.visibleLocations.length);
             this.renderList(this.visibleLocations);
             await this.renderCanvas(this.visibleLocations, { preserveViewport: true });
             this.syncFavoriteButtons();
             this.syncActiveCard();
+            this.refreshDetailSheet();
             this.lastDiscoveryCenter = centerPosition;
             this.setStatus('Descubrimos más locales en esta zona del mapa.');
         } catch (error) {
@@ -1515,6 +1695,12 @@ export default class extends Controller {
         const sourceBadgeClass = this.sourceBadgeClass(location);
         const hoursSummary = this.openingHoursSummary(location);
         const reviewSnippet = this.reviewSnippet(location);
+        const categoryKey = this.locationCategoryKey(location);
+        const categoryMarkup = categoryKey !== 'all'
+            ? `<span class="map-shell__info-window-badge map-shell__info-window-badge--category" style="--category-accent:${this.escapeHtml(this.categoryColor(categoryKey))};">${this.escapeHtml(this.categoryDisplayName(categoryKey))}</span>`
+            : '';
+        const claimUrl = this.buildClaimUrl(location);
+        const detailKey = this.escapeHtml(this.locationKey(location));
 
         return `
             <article class="map-shell__info-window">
@@ -1524,6 +1710,7 @@ export default class extends Controller {
                         <p class="map-shell__info-window-merchant">${merchantName}</p>
                     </div>
                     <div class="map-shell__info-window-badge-stack">
+                        ${categoryMarkup}
                         <span class="map-shell__info-window-badge map-shell__info-window-badge--source ${sourceBadgeClass}">${sourceLabel}</span>
                         <span class="map-shell__info-window-badge ${statusClass}">${statusLabel}</span>
                     </div>
@@ -1536,8 +1723,10 @@ export default class extends Controller {
                 ${hoursSummary ? `<p class="map-shell__info-window-detail">${this.escapeHtml(hoursSummary)}</p>` : ''}
                 ${reviewSnippet ? `<p class="map-shell__info-window-review">${this.escapeHtml(reviewSnippet)}</p>` : ''}
                 <div class="map-shell__info-window-actions">
+                    <button type="button" data-action="click->map-shell#openLocationFromInfoWindow" data-location-key="${detailKey}">Ver ficha</button>
                     ${directionsUrl ? `<a href="${this.escapeHtml(directionsUrl)}" target="_blank" rel="noreferrer">Cómo llegar</a>` : ''}
                     ${whatsappUrl ? `<a href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer">WhatsApp</a>` : ''}
+                    ${claimUrl ? `<a href="${this.escapeHtml(claimUrl)}">Reclamar</a>` : ''}
                 </div>
             </article>
         `;
@@ -1628,23 +1817,31 @@ export default class extends Controller {
         return 'map-shell__info-window-badge--open';
     }
 
-    locationCategory(location) {
+    locationCategoryKey(location) {
+        if (location.category_slug) {
+            return String(location.category_slug);
+        }
+
         const types = Array.isArray(location.types) ? location.types.map((type) => String(type).toLowerCase()) : [];
+        const mappedCatalogCategory = this.inferCatalogCategoryFromTypes(types) || this.inferCatalogCategoryFromText(location);
+        if (mappedCatalogCategory) {
+            return mappedCatalogCategory;
+        }
 
         if (types.some((type) => ['meal_takeaway', 'mexican_restaurant', 'taco_restaurant'].includes(type))) {
-            return 'taqueria';
+            return 'tacos';
         }
 
         if (types.some((type) => ['vegetarian_restaurant', 'vegan_restaurant'].includes(type))) {
-            return 'vegetariano';
+            return 'veggie';
         }
 
         if (types.some((type) => ['cafe', 'bakery', 'coffee_shop'].includes(type))) {
-            return 'cafeteria';
+            return 'cafe';
         }
 
         if (types.some((type) => ['restaurant', 'food', 'meal_delivery'].includes(type))) {
-            return 'restaurante';
+            return 'comida';
         }
 
         const haystack = [
@@ -1658,18 +1855,183 @@ export default class extends Controller {
             .toLowerCase();
 
         if (haystack.includes('taco') || haystack.includes('taquer')) {
-            return 'taqueria';
+            return 'tacos';
         }
 
         if (haystack.includes('veggie') || haystack.includes('vegetar') || haystack.includes('vegano') || haystack.includes('ensalada')) {
-            return 'vegetariano';
+            return 'veggie';
         }
 
         if (haystack.includes('cafe') || haystack.includes('cafeter') || haystack.includes('coffee')) {
-            return 'cafeteria';
+            return 'cafe';
         }
 
         return 'all';
+    }
+
+    registerCategoryCatalog(catalog) {
+        this.categoryCatalog = Array.isArray(catalog)
+            ? catalog
+                .filter((category) => category && category.slug)
+                .sort((left, right) => Number(left.sort_order ?? 0) - Number(right.sort_order ?? 0))
+            : [];
+        this.categoryCatalogBySlug = new Map(this.categoryCatalog.map((category) => [String(category.slug), category]));
+    }
+
+    categoryDisplayName(categoryKey) {
+        if (categoryKey === 'all') {
+            return 'Todos';
+        }
+
+        return this.categoryInfo(categoryKey).label;
+    }
+
+    categoryColor(categoryKey) {
+        if (categoryKey === 'all') {
+            return '#F97316';
+        }
+
+        return this.categoryInfo(categoryKey).colorHex;
+    }
+
+    categoryInfo(categoryKey) {
+        const catalogCategory = this.categoryCatalogBySlug.get(String(categoryKey));
+        if (catalogCategory) {
+            return {
+                label: String(catalogCategory.name ?? this.labelFromSlug(String(categoryKey))),
+                colorHex: String(catalogCategory.color_hex ?? '#CBD5E1'),
+                iconKey: String(catalogCategory.icon_key ?? ''),
+            };
+        }
+
+        const fallback = this.fallbackCategoryDefinitions[String(categoryKey)];
+        if (fallback) {
+            return fallback;
+        }
+
+        return {
+            label: this.labelFromSlug(String(categoryKey)),
+            colorHex: '#CBD5E1',
+            iconKey: '',
+        };
+    }
+
+    inferCatalogCategoryFromTypes(types) {
+        if (!Array.isArray(types) || types.length === 0) {
+            return null;
+        }
+
+        for (const category of this.categoryCatalog) {
+            const mappings = Array.isArray(category.google_place_type_mappings) ? category.google_place_type_mappings.map((value) => String(value).toLowerCase()) : [];
+            if (mappings.some((mappedType) => types.includes(mappedType))) {
+                return String(category.slug);
+            }
+        }
+
+        if (types.some((type) => ['meal_takeaway', 'mexican_restaurant', 'taco_restaurant'].includes(type))) {
+            return this.findCatalogSlugByKeywords(['taco', 'taqu']);
+        }
+
+        if (types.some((type) => ['vegetarian_restaurant', 'vegan_restaurant'].includes(type))) {
+            return this.findCatalogSlugByKeywords(['veggie', 'veget', 'veg']);
+        }
+
+        if (types.some((type) => ['cafe', 'bakery', 'coffee_shop'].includes(type))) {
+            return this.findCatalogSlugByKeywords(['cafe', 'caf', 'coffee']);
+        }
+
+        if (types.some((type) => ['restaurant', 'food', 'meal_delivery'].includes(type))) {
+            return this.findCatalogSlugByKeywords(['comida', 'rest', 'food']);
+        }
+
+        return null;
+    }
+
+    inferCatalogCategoryFromText(location) {
+        const haystack = [
+            location.location_name,
+            location.merchant_name,
+            location.short_address,
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        if (haystack.includes('taco') || haystack.includes('taquer')) {
+            return this.findCatalogSlugByKeywords(['taco', 'taqu']);
+        }
+
+        if (haystack.includes('veggie') || haystack.includes('vegetar') || haystack.includes('vegano')) {
+            return this.findCatalogSlugByKeywords(['veggie', 'veget', 'veg']);
+        }
+
+        if (haystack.includes('cafe') || haystack.includes('cafeter') || haystack.includes('coffee')) {
+            return this.findCatalogSlugByKeywords(['cafe', 'caf', 'coffee']);
+        }
+
+        return null;
+    }
+
+    findCatalogSlugByKeywords(keywords) {
+        for (const category of this.categoryCatalog) {
+            const haystack = this.normalizeComparisonText(`${category.slug ?? ''} ${category.name ?? ''}`);
+            if (keywords.some((keyword) => haystack.includes(this.normalizeComparisonText(keyword)))) {
+                return String(category.slug);
+            }
+        }
+
+        return null;
+    }
+
+    labelFromSlug(slug) {
+        return String(slug)
+            .split('-')
+            .filter(Boolean)
+            .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+            .join(' ');
+    }
+
+    categoryTagMarkup(location) {
+        const categoryKey = this.locationCategoryKey(location);
+        if (categoryKey === 'all') {
+            return '';
+        }
+
+        return `
+            <div class="mobile-map-card__category">
+                <span class="mobile-map-card__category-dot" style="background:${this.escapeHtml(this.categoryColor(categoryKey))};"></span>
+                <span>${this.escapeHtml(this.categoryDisplayName(categoryKey))}</span>
+            </div>
+        `;
+    }
+
+    markerIcon(google, location) {
+        return {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: this.categoryColor(this.locationCategoryKey(location)),
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+        };
+    }
+
+    markerLabel(location) {
+        return {
+            text: this.markerLabelText(location),
+            color: '#ffffff',
+            fontSize: '10px',
+            fontWeight: '700',
+        };
+    }
+
+    markerLabelText(location) {
+        const categoryKey = this.locationCategoryKey(location);
+        if (categoryKey !== 'all') {
+            return this.categoryDisplayName(categoryKey).slice(0, 1).toUpperCase();
+        }
+
+        return String(location.merchant_name ?? location.location_name ?? 'L').slice(0, 1).toUpperCase();
     }
 
     buildDirectionsUrl(location) {
@@ -1698,6 +2060,41 @@ export default class extends Controller {
         }
 
         return `https://wa.me/${phone}`;
+    }
+
+    buildClaimUrl(location) {
+        const canClaim = location.source_type === 'google_places' || location.is_claimable === true;
+        if (!canClaim || !this.hasClaimUrlValue || !this.claimUrlValue) {
+            return null;
+        }
+
+        const url = new URL(this.claimUrlValue, window.location.origin);
+        if (location.location_id != null) {
+            url.searchParams.set('location_id', String(location.location_id));
+        }
+        if (location.place_id) {
+            url.searchParams.set('place_id', String(location.place_id));
+        }
+        if (location.source_type) {
+            url.searchParams.set('source_type', String(location.source_type));
+        }
+        if (location.location_name) {
+            url.searchParams.set('location_name', String(location.location_name));
+        }
+        if (location.short_address) {
+            url.searchParams.set('short_address', String(location.short_address));
+        }
+        if (Number.isFinite(Number(location.lat))) {
+            url.searchParams.set('lat', String(location.lat));
+        }
+        if (Number.isFinite(Number(location.lng))) {
+            url.searchParams.set('lng', String(location.lng));
+        }
+        if (location.category_slug) {
+            url.searchParams.set('category_slug', String(location.category_slug));
+        }
+
+        return url.toString();
     }
 
     hasUserCoordinates() {
@@ -1733,28 +2130,106 @@ export default class extends Controller {
         if (this.locationSwitcherOpen) {
             const savedAddressesMarkup = this.savedAddresses.length > 0
                 ? this.savedAddresses.map((address) => `
-                    <button
+                    ${address.latitude && address.longitude ? `<button
                         type="button"
                         class="mobile-map-app__location-item"
                         data-action="click->map-shell#selectSavedAddress"
+                        data-address-id="${this.escapeHtml(String(address.id ?? ''))}"
                         data-lat="${this.escapeHtml(String(address.latitude))}"
                         data-lng="${this.escapeHtml(String(address.longitude))}"
                         data-label="${this.escapeHtml(address.label)}"
                     >
                         <strong>${this.escapeHtml(address.label)}</strong>
                         <span>${this.escapeHtml(this.addressLine(address))}</span>
-                    </button>
+                    </button>` : `
+                    <div class="mobile-map-app__location-item">
+                        <strong>${this.escapeHtml(address.label)}</strong>
+                        <span>${this.escapeHtml(this.addressLine(address))}</span>
+                    </div>
+                    `}
                 `).join('')
                 : '<p class="mobile-map-app__location-item">No tienes ubicaciones guardadas.</p>';
 
             // Aquí podrías añadir un enlace a un futuro flujo para agregar direcciones
             const addAddressMarkup = `
-                <a href="#" class="mobile-map-app__location-item">
+                <button type="button" class="mobile-map-app__location-item" data-action="click->map-shell#showAddressesSection">
                     <strong>Agregar nueva ubicación</strong>
-                </a>
+                </button>
             `;
 
             this.locationSwitcherTarget.innerHTML = savedAddressesMarkup + addAddressMarkup;
+        }
+    }
+
+    renderExploreMode() {
+        const isMapMode = this.exploreMode !== 'list';
+
+        if (this.hasMapStageTarget) {
+            this.mapStageTarget.classList.toggle('is-hidden', !isMapMode);
+        }
+        if (this.hasExploreListTarget) {
+            this.exploreListTarget.classList.toggle('is-hidden', isMapMode);
+        }
+        if (this.hasMapModeButtonTarget) {
+            this.mapModeButtonTarget.classList.toggle('is-active', isMapMode);
+        }
+        if (this.hasListModeButtonTarget) {
+            this.listModeButtonTarget.classList.toggle('is-active', !isMapMode);
+        }
+    }
+
+    renderActiveSection() {
+        const sections = {
+            explore: this.hasExploreSectionTarget ? this.exploreSectionTarget : null,
+            favorites: this.hasFavoritesSectionTarget ? this.favoritesSectionTarget : null,
+            addresses: this.hasAddressesSectionTarget ? this.addressesSectionTarget : null,
+            profile: this.hasProfileSectionTarget ? this.profileSectionTarget : null,
+        };
+
+        Object.entries(sections).forEach(([name, element]) => {
+            if (!element) {
+                return;
+            }
+
+            element.classList.toggle('is-hidden', name !== this.activeSection);
+        });
+
+        const tabs = {
+            explore: this.hasExploreTabButtonTarget ? this.exploreTabButtonTarget : null,
+            favorites: this.hasFavoritesTabButtonTarget ? this.favoritesTabButtonTarget : null,
+            addresses: this.hasAddressesTabButtonTarget ? this.addressesTabButtonTarget : null,
+            profile: this.hasProfileTabButtonTarget ? this.profileTabButtonTarget : null,
+        };
+
+        Object.entries(tabs).forEach(([name, button]) => {
+            if (!button) {
+                return;
+            }
+
+            button.classList.toggle('is-active', name === this.activeSection);
+        });
+
+        if (this.activeSection === 'explore') {
+            this.refreshMapViewport();
+        }
+    }
+
+    persistExploreMode() {
+        try {
+            window.localStorage.setItem('mm_explore_mode', this.exploreMode);
+        } catch (error) {
+            // Ignore storage failures.
+        }
+    }
+
+    restoreExploreMode() {
+        try {
+            const storedMode = window.localStorage.getItem('mm_explore_mode');
+            if (storedMode === 'list' || storedMode === 'map') {
+                this.exploreMode = storedMode;
+            }
+        } catch (error) {
+            this.exploreMode = 'map';
         }
     }
 
@@ -1965,6 +2440,26 @@ export default class extends Controller {
         this.syncActiveCard();
     }
 
+    async openLocationFromInfoWindow(event) {
+        const locationKey = event.currentTarget.dataset.locationKey ?? '';
+        if (locationKey === '') {
+            return;
+        }
+
+        const location = this.currentLocations.find((item) => this.locationKey(item) === locationKey);
+        if (!location) {
+            return;
+        }
+
+        const enrichedLocation = await this.enrichLocationIfNeeded(location);
+        this.renderDetailSheet(enrichedLocation);
+        this.logInteraction('public_location_opened', 'location', Number(enrichedLocation.location_id) || null, {
+            source_type: enrichedLocation.source_type ?? null,
+            place_id: enrichedLocation.place_id ?? null,
+            via: 'info_window',
+        });
+    }
+
     syncActiveCard() {
         this.element.querySelectorAll('[data-card-location-key]').forEach((element) => {
             const locationKey = element.dataset.cardLocationKey ?? '';
@@ -2023,11 +2518,12 @@ export default class extends Controller {
     }
 
     mediaStyle(location) {
-        if (!location.photo_url) {
+        const photoUrl = this.locationVisualPhotoUrl(location);
+        if (!photoUrl) {
             return '';
         }
 
-        return `style="background-image:url('${this.escapeHtml(location.photo_url)}')"`;
+        return `style="background-image:url('${this.escapeHtml(photoUrl)}')"`;
     }
 
     async enrichLocationIfNeeded(location) {
@@ -2074,10 +2570,11 @@ export default class extends Controller {
 
         if (options.rerenderVisible) {
             this.renderCategoryChips(this.currentLocations);
-            this.countTarget.textContent = String(this.visibleLocations.length);
+            this.updateCounts(this.visibleLocations.length);
             this.renderList(this.visibleLocations);
             this.syncFavoriteButtons();
             this.syncActiveCard();
+            this.refreshDetailSheet();
         }
 
         return nextLocation;
@@ -2129,6 +2626,13 @@ export default class extends Controller {
         return `${author}${snippet.length > 110 ? `${snippet.slice(0, 107)}...` : snippet}`;
     }
 
+    locationVisualPhotoUrl(location) {
+        return location.photo_url
+            || location.category_cover_photo_url
+            || location.category_default_photo_url
+            || null;
+    }
+
     escapeHtml(value) {
         return String(value)
             .replaceAll('&', '&amp;')
@@ -2162,5 +2666,125 @@ export default class extends Controller {
         }
 
         return payload;
+    }
+
+    renderDetailSheet(location) {
+        if (!this.hasDetailSheetTarget || !this.hasDetailSheetBodyTarget || !location) {
+            return;
+        }
+
+        const canFavorite = this.canFavorite(location);
+        const categoryKey = this.locationCategoryKey(location);
+        const categoryLabel = categoryKey !== 'all' ? this.categoryDisplayName(categoryKey) : '';
+        const categoryColor = categoryKey !== 'all' ? this.categoryColor(categoryKey) : '#E5E7EB';
+        const directionsUrl = this.buildDirectionsUrl(location);
+        const whatsappUrl = this.buildWhatsAppUrl(location.whatsapp_enabled, location.whatsapp_e164);
+        const claimUrl = this.buildClaimUrl(location);
+        const isFavorite = Number.isInteger(Number(location.location_id)) && this.favoriteLocationIds.includes(Number(location.location_id));
+        const ratingLabel = this.reviewsLabel(location);
+        const hoursSummary = this.openingHoursSummary(location);
+        const reviewSnippet = this.reviewSnippet(location);
+        const detailKey = this.escapeHtml(this.locationKey(location));
+
+        this.detailSheetBodyTarget.innerHTML = `
+            <div class="mobile-map-app__detail-hero ${this.locationVisualPhotoUrl(location) ? 'has-photo' : ''}" ${this.mediaStyle(location)}>
+                <span class="mobile-map-app__detail-source ${this.sourceBadgeClass(location)}">${this.escapeHtml(this.sourceTypeLabel(location.source_type))}</span>
+                <div class="mobile-map-app__detail-distance">${this.escapeHtml(this.formatDistance(location.distance_meters))}</div>
+            </div>
+            <div class="mobile-map-app__detail-copy">
+                <div class="mobile-map-app__detail-head">
+                    <div>
+                        <h3>${this.escapeHtml(location.location_name ?? 'Local sin nombre')}</h3>
+                        <p>${this.escapeHtml(this.cardSubtitle(location))}</p>
+                    </div>
+                    <span class="mobile-map-app__detail-status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
+                </div>
+                ${categoryLabel ? `<div class="mobile-map-app__detail-category"><span style="background:${this.escapeHtml(categoryColor)};"></span>${this.escapeHtml(categoryLabel)}</div>` : ''}
+                <div class="mobile-map-app__detail-meta">
+                    <span>${this.escapeHtml(ratingLabel)}</span>
+                    <span>${this.escapeHtml(location.short_address ?? 'Dirección pendiente')}</span>
+                </div>
+                ${hoursSummary ? `<p class="mobile-map-app__detail-note">${this.escapeHtml(hoursSummary)}</p>` : ''}
+                ${reviewSnippet ? `<blockquote class="mobile-map-app__detail-review">${this.escapeHtml(reviewSnippet)}</blockquote>` : ''}
+                <div class="mobile-map-app__detail-actions">
+                    ${directionsUrl ? `<a href="${this.escapeHtml(directionsUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_directions_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Cómo llegar</a>` : ''}
+                    ${whatsappUrl ? `<a href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_whatsapp_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">WhatsApp</a>` : ''}
+                    ${claimUrl ? `<a href="${this.escapeHtml(claimUrl)}" data-action="click->map-shell#trackExternalAction" data-event-name="public_claim_started" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Reclamar</a>` : ''}
+                    ${canFavorite ? `<button type="button" class="${isFavorite ? 'is-active' : ''}" data-action="click->map-shell#toggleFavoriteFromSheet" data-location-id="${this.escapeHtml(String(location.location_id))}">${isFavorite ? 'Quitar favorito' : 'Guardar favorito'}</button>` : ''}
+                </div>
+            </div>
+        `;
+
+        this.detailSheetTarget.classList.remove('is-hidden');
+        this.detailSheetTarget.classList.add('is-visible');
+    }
+
+    refreshDetailSheet() {
+        if (!this.hasDetailSheetTarget || this.detailSheetTarget.classList.contains('is-hidden') || !this.selectedLocationId) {
+            return;
+        }
+
+        const location = this.currentLocations.find((item) => this.locationKey(item) === this.selectedLocationId);
+        if (!location) {
+            this.closeDetailSheet();
+            return;
+        }
+
+        this.renderDetailSheet(location);
+    }
+
+    closeDetailSheet() {
+        if (!this.hasDetailSheetTarget) {
+            return;
+        }
+
+        this.detailSheetTarget.classList.remove('is-visible');
+        this.detailSheetTarget.classList.add('is-hidden');
+    }
+
+    async toggleFavoriteFromSheet(event) {
+        await this.toggleFavorite(event);
+        this.refreshDetailSheet();
+    }
+
+    trackExternalAction(event) {
+        const entityIdRaw = event.currentTarget.dataset.entityId ?? '';
+        const locationKey = event.currentTarget.dataset.locationKey ?? '';
+        const location = this.currentLocations.find((item) => this.locationKey(item) === locationKey) ?? null;
+
+        this.logInteraction(
+            event.currentTarget.dataset.eventName ?? 'public_link_clicked',
+            'location',
+            entityIdRaw !== '' ? Number(entityIdRaw) : null,
+            {
+                source_type: location?.source_type ?? null,
+                place_id: location?.place_id ?? null,
+                location_name: location?.location_name ?? null,
+            },
+        );
+    }
+
+    async logInteraction(eventName, entityType, entityId = null, metadata = {}) {
+        if (!this.hasEventLogUrlValue || !this.eventLogUrlValue) {
+            return;
+        }
+
+        try {
+            await fetch(this.eventLogUrlValue, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    event_name: eventName,
+                    entity_type: entityType,
+                    entity_id: entityId,
+                    metadata,
+                }),
+            });
+        } catch (error) {
+            // No bloquear UX por fallas de analítica.
+        }
     }
 }

@@ -1,0 +1,35 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Reclamar local{% endblock %}
+
+{% block body %}
+    <main style="min-height: 100vh; display: grid; place-items: center; background: linear-gradient(180deg, #f9fafb 0%, #eef2f7 100%); padding: 1.5rem;">
+        <section style="width: 100%; max-width: 560px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 20px; padding: 2rem;">
+            <h1 style="margin: 0 0 0.75rem;">Reclamar este local</h1>
+            <p style="margin: 0 0 1rem; color: #4b5563;">Déjanos tus datos para validar que eres el dueño o representante auténtico del local.</p>
+            {% if errors is not empty %}
+                <div style="margin-bottom: 1rem; border-radius: 12px; background: #fef2f2; color: #991b1b; padding: 0.9rem 1rem;">
+                    {% for error in errors %}<div>{{ error }}</div>{% endfor %}
+                </div>
+            {% endif %}
+            <form method="post" style="display:grid; gap:0.9rem;">
+                <input type="hidden" name="source_type" value="{{ form.source_type ?? 'google_places' }}">
+                <input type="hidden" name="canonical_location_id" value="{{ form.canonical_location_id ?? '' }}">
+                <input type="hidden" name="external_source_key" value="{{ form.external_source_key ?? '' }}">
+                <input type="hidden" name="lat" value="{{ form.lat ?? '' }}">
+                <input type="hidden" name="lng" value="{{ form.lng ?? '' }}">
+                <input type="hidden" name="category_slug" value="{{ form.category_slug ?? '' }}">
+                <input type="text" name="location_name" required value="{{ form.location_name ?? '' }}" placeholder="Nombre del local" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem;">
+                <input type="text" name="short_address" value="{{ form.short_address ?? '' }}" placeholder="Dirección corta" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem;">
+                <input type="text" name="claimant_name" required value="{{ form.claimant_name ?? '' }}" placeholder="Tu nombre" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem;">
+                <input type="email" name="email" required value="{{ form.email ?? '' }}" placeholder="Tu correo" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem;">
+                <input type="text" name="whatsapp_e164" value="{{ form.whatsapp_e164 ?? '' }}" placeholder="WhatsApp E164 opcional" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem;">
+                <textarea name="message" rows="4" placeholder="Cuéntanos por qué eres el dueño o representante" style="width:100%; border:1px solid #d1d5db; border-radius:12px; padding:0.85rem 1rem; resize:vertical;">{{ form.message ?? '' }}</textarea>
+                <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                    <button type="submit" style="border:none; border-radius:12px; background:#111827; color:#ffffff; padding:0.9rem 1rem; font-weight:700;">Enviar claim</button>
+                    <a href="{{ path('public_home') }}" style="display:inline-flex; align-items:center; justify-content:center; border-radius:12px; border:1px solid #d1d5db; color:#374151; padding:0.9rem 1rem; text-decoration:none; font-weight:700;">Volver</a>
+                </div>
+            </form>
+        </section>
+    </main>
+{% endblock %}

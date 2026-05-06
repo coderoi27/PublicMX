@@ -6,8 +6,10 @@ namespace App\Controller\Public;
 
 use App\Entity\Public\PublicInterestLead;
 use App\Entity\Public\PublicUser;
+use App\Service\Public\BlockedEmailDomainClient;
 use App\Service\Public\InvitationRequestClient;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -16,6 +18,7 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class AlphaInvitationRequestController extends AbstractController
@@ -25,12 +28,27 @@ final class AlphaInvitationRequestController extends AbstractController
         Request $request,
         EntityManagerInterface $entityManager,
         InvitationRequestClient $invitationRequestClient,
+        BlockedEmailDomainClient $blockedEmailDomainClient,
         MailerInterface $mailer,
         ParameterBagInterface $parameterBag,
+        #[Autowire(service: 'limiter.public_alpha_invitation')] RateLimiterFactory $alphaInvitationLimiter,
     ): RedirectResponse {
         $email = mb_strtolower(trim((string) $request->request->get('email')));
+        $limit = $alphaInvitationLimiter->create(($request->getClientIp() ?? 'unknown') . '|' . $email)->consume(1);
+        if (!$limit->isAccepted()) {
+            $this->addFlash('error', 'Alcanzaste el límite temporal de solicitudes alpha. Intenta más tarde.');
+
+            return $this->redirectToRoute('public_home');
+        }
+
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->addFlash('error', 'Captura un correo valido para solicitar tu acceso alpha.');
+
+            return $this->redirectToRoute('public_home');
+        }
+
+        if ($blockedEmailDomainClient->isBlocked($email)) {
+            $this->addFlash('error', 'No aceptamos correos temporales o desechables para el acceso alpha.');
 
             return $this->redirectToRoute('public_home');
         }

@@ -54,6 +54,14 @@ final class AddressesController extends AbstractController
             ->setLongitude(isset($payload['longitude']) ? (string) $payload['longitude'] : null)
             ->setIsPrimary((bool) ($payload['is_primary'] ?? false));
 
+        $existingAddresses = $entityManager->getRepository(PublicUserAddress::class)->findBy(['publicUser' => $user], ['id' => 'DESC']);
+        if ($address->isPrimary() || count($existingAddresses) === 0) {
+            $address->setIsPrimary(true);
+            foreach ($existingAddresses as $existingAddress) {
+                $existingAddress->setIsPrimary(false);
+            }
+        }
+
         $entityManager->persist($address);
         $entityManager->flush();
 
@@ -65,5 +73,19 @@ final class AddressesController extends AbstractController
             'meta' => [],
             'errors' => [],
         ], 201);
+    }
+
+    #[Route('/api/v1/me/addresses/{id}', name: 'public_api_addresses_delete', methods: ['DELETE'])]
+    public function delete(PublicUserAddress $address, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof PublicUser || $address->getPublicUser()->getId() !== $user->getId()) {
+            return $this->json(['data' => null, 'meta' => [], 'errors' => ['Unauthenticated.']], 401);
+        }
+
+        $entityManager->remove($address);
+        $entityManager->flush();
+
+        return $this->json(['data' => ['id' => $address->getId()], 'meta' => [], 'errors' => []]);
     }
 }

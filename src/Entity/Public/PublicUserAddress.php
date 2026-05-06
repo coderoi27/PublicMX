@@ -76,6 +76,11 @@ class PublicUserAddress
         return $this;
     }
 
+    public function getPublicUser(): PublicUser
+    {
+        return $this->publicUser;
+    }
+
     public function setLabel(string $label): self
     {
         $this->label = $label;

@@ -17,6 +17,8 @@ security:
             lazy: true
             provider: public_users
             user_checker: App\Security\PublicUserChecker
+            login_throttling:
+                max_attempts: 5
             form_login:
                 login_path: public_login
                 check_path: public_login

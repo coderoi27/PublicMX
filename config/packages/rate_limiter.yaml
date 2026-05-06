@@ -1,0 +1,14 @@
+framework:
+    rate_limiter:
+        public_alpha_invitation:
+            policy: token_bucket
+            limit: 5
+            rate: { interval: '15 minutes', amount: 5 }
+        public_register:
+            policy: token_bucket
+            limit: 5
+            rate: { interval: '15 minutes', amount: 5 }
+        public_verify_otp:
+            policy: token_bucket
+            limit: 8
+            rate: { interval: '15 minutes', amount: 8 }

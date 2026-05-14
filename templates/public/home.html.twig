@@ -73,6 +73,9 @@
                     class="welcome-flow__logo is-hidden"
                     data-map-shell-target="walkthroughLogo"
                 >
+                <div class="welcome-flow__legal">
+                    {% include 'public/_partials/legal_links.html.twig' %}
+                </div>
             </div>
 
             <header class="mobile-map-app__header">
@@ -211,9 +214,8 @@
                                                 </svg>
                                                 Sin reviews
                                             </span>
-                                        </span>
+                                        </div>
                                     </div>
-                </div>
                                 </article>
                             {% endfor %}
                         {% endif %}
@@ -334,6 +336,14 @@
                             <span>Mis ubis: <strong data-map-shell-target="addressesCountDuplicate">0</strong></span>
                         </div>
                     </article>
+                    <article class="mobile-map-app__auth-card">
+                        <strong>Acciones rápidas</strong>
+                        <p>Tu actividad se guarda para recuperar favoritos y Mis ubis en futuras sesiones.</p>
+                        <div class="mobile-map-app__auth-actions">
+                            <button type="button" data-action="map-shell#showFavoritesSection">Ver favoritos</button>
+                            <button type="button" data-action="map-shell#showAddressesSection">Ver Mis ubis</button>
+                        </div>
+                    </article>
                 {% else %}
                     <article class="mobile-map-app__auth-card">
                         <strong>Tu perfil se activa al registrarte</strong>
@@ -344,6 +354,20 @@
                         </div>
                     </article>
                 {% endif %}
+                <article class="mobile-map-app__auth-card">
+                    <strong>Privacidad y condiciones</strong>
+                    <p>Consulta cómo usamos datos de ubicación, favoritos, cookies, Google Maps y servicios de terceros.</p>
+                    {% include 'public/_partials/legal_links.html.twig' %}
+                </article>
+                <article class="mobile-map-app__auth-card">
+                    <strong>Cookies y analítica</strong>
+                    <p data-map-shell-target="cookieConsentStatus">Sin decisión registrada en este dispositivo.</p>
+                    <div class="mobile-map-app__auth-actions">
+                        <button type="button" data-action="map-shell#acceptCookiesFromProfile">Aceptar analítica</button>
+                        <button type="button" data-action="map-shell#rejectCookiesFromProfile">Solo esenciales</button>
+                        <button type="button" data-action="map-shell#resetCookiesFromProfile">Revisar banner</button>
+                    </div>
+                </article>
             </section>
 
             <aside class="mobile-map-app__detail-sheet is-hidden" data-map-shell-target="detailSheet">

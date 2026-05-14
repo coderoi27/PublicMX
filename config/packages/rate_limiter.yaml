@@ -12,3 +12,7 @@ framework:
             policy: token_bucket
             limit: 8
             rate: { interval: '15 minutes', amount: 8 }
+        public_claim_location:
+            policy: token_bucket
+            limit: 4
+            rate: { interval: '30 minutes', amount: 4 }

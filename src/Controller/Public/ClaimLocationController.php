@@ -5,17 +5,24 @@ declare(strict_types=1);
 namespace App\Controller\Public;
 
 use App\Entity\Public\PublicUser;
+use App\Service\Public\BlockedEmailDomainClient;
 use App\Service\Public\LocationClaimClient;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class ClaimLocationController extends AbstractController
 {
     #[Route('/claim-local', name: 'public_claim_location', methods: ['GET', 'POST'])]
-    public function __invoke(Request $request, LocationClaimClient $locationClaimClient): Response
-    {
+    public function __invoke(
+        Request $request,
+        LocationClaimClient $locationClaimClient,
+        BlockedEmailDomainClient $blockedEmailDomainClient,
+        #[Autowire(service: 'limiter.public_claim_location')] RateLimiterFactory $claimLimiter,
+    ): Response {
         $defaults = [
             'source_type' => (string) $request->query->get('source_type', 'google_places'),
             'canonical_location_id' => $request->query->get('location_id'),
@@ -52,6 +59,14 @@ final class ClaimLocationController extends AbstractController
             'message' => trim((string) $request->request->get('message', '')),
         ];
 
+        $limit = $claimLimiter->create(($request->getClientIp() ?? 'unknown') . '|' . $form['email'])->consume(1);
+        if (!$limit->isAccepted()) {
+            return $this->render('public/claim_location.html.twig', [
+                'form' => $form,
+                'errors' => ['Alcanzaste el límite temporal de solicitudes de claim. Intenta más tarde.'],
+            ], new Response('', 429));
+        }
+
         $errors = [];
         foreach (['source_type', 'location_name', 'claimant_name', 'email'] as $field) {
             if ($form[$field] === '') {
@@ -62,6 +77,10 @@ final class ClaimLocationController extends AbstractController
 
         if (!filter_var($form['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Captura un correo válido.';
+        }
+
+        if ($blockedEmailDomainClient->isBlocked($form['email'])) {
+            $errors[] = 'No aceptamos correos temporales o desechables para solicitar claims.';
         }
 
         if ($errors !== []) {

@@ -55,6 +55,7 @@ export default class extends Controller {
         'walkthroughGeoButton',
         'walkthroughLogo',
         'walkthroughError',
+        'cookieConsentStatus',
     ];
     static values = {
         feedUrl: String,
@@ -90,6 +91,8 @@ export default class extends Controller {
         this.categoryCatalogBySlug = new Map();
         this.selectedLocationId = null;
         this.activeCategoryFilter = 'all';
+        this.joyitasOnly = false;
+        this.activeSourceFilter = 'all';
         this.map = null;
         this.markers = [];
         this.infoWindow = null;
@@ -114,6 +117,7 @@ export default class extends Controller {
         this.restorePersistedLocationContext();
         this.renderFavoritesSummary();
         this.renderAddressesSummary();
+        this.renderCookieConsentStatus();
         this.renderExploreMode();
         this.renderActiveSection();
         const walkthroughIsActive = this.initializeWalkthrough();
@@ -589,7 +593,13 @@ export default class extends Controller {
 
     async applyCategoryFilter(event) {
         const nextFilter = event.currentTarget.dataset.categoryFilter ?? 'all';
-        this.activeCategoryFilter = nextFilter;
+        if (nextFilter === '__joyitas') {
+            this.joyitasOnly = !this.joyitasOnly;
+        } else if (nextFilter.startsWith('__source:')) {
+            this.activeSourceFilter = nextFilter.replace('__source:', '') || 'all';
+        } else {
+            this.activeCategoryFilter = nextFilter;
+        }
         this.renderCategoryChips();
 
         this.visibleLocations = this.filteredLocations(this.currentLocations);
@@ -636,6 +646,7 @@ export default class extends Controller {
                 <div class="mobile-map-card__body">
                     <h3>${this.escapeHtml(location.location_name ?? 'Sin nombre')}</h3>
                     <p>${this.escapeHtml(this.cardSubtitle(location))}</p>
+                    ${this.joyitaBadgeMarkup(location)}
                     ${this.categoryTagMarkup(location)}
                     <div class="mobile-map-card__meta">
                         <span class="mobile-map-card__status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
@@ -680,11 +691,13 @@ export default class extends Controller {
     }
 
     filteredLocations(locations) {
-        if (this.activeCategoryFilter === 'all') {
-            return locations;
-        }
+        return locations.filter((location) => {
+            const matchesCategory = this.activeCategoryFilter === 'all' || this.locationCategoryKey(location) === this.activeCategoryFilter;
+            const matchesJoyita = !this.joyitasOnly || this.locationIsJoyita(location);
+            const matchesSource = this.activeSourceFilter === 'all' || this.locationSourceGroup(location) === this.activeSourceFilter;
 
-        return locations.filter((location) => this.locationCategoryKey(location) === this.activeCategoryFilter);
+            return matchesCategory && matchesJoyita && matchesSource;
+        });
     }
 
     renderCategoryChips(locations = this.currentLocations) {
@@ -696,8 +709,11 @@ export default class extends Controller {
         if (!categoryKeys.includes(this.activeCategoryFilter)) {
             this.activeCategoryFilter = 'all';
         }
+        if (!this.availableSourceKeys(locations).includes(this.activeSourceFilter)) {
+            this.activeSourceFilter = 'all';
+        }
 
-        this.chipRowTarget.innerHTML = categoryKeys.map((categoryKey) => {
+        this.chipRowTarget.innerHTML = this.sourceFilterChipMarkup(locations) + categoryKeys.map((categoryKey) => {
             const label = categoryKey === 'all' ? 'Todos' : this.categoryDisplayName(categoryKey);
             const chipStyle = categoryKey === 'all'
                 ? ''
@@ -715,7 +731,53 @@ export default class extends Controller {
                     ${this.escapeHtml(label)}
                 </button>
             `;
-        }).join('');
+        }).join('') + this.joyitasChipMarkup(locations);
+    }
+
+    sourceFilterChipMarkup(locations) {
+        const availableSources = this.availableSourceKeys(locations);
+        const chips = [
+            ['all', 'Todas las fuentes', true],
+            ['mimonchis', 'Mi Monchis', availableSources.includes('mimonchis')],
+            ['google', 'Google', availableSources.includes('google')],
+        ];
+
+        return chips
+            .filter(([, , isVisible]) => isVisible)
+            .map(([sourceKey, label]) => `
+                <button
+                    type="button"
+                    class="mobile-map-app__chip mobile-map-app__chip--source ${this.activeSourceFilter === sourceKey ? 'is-active' : ''}"
+                    data-category-filter="__source:${this.escapeHtml(sourceKey)}"
+                    data-action="map-shell#applyCategoryFilter"
+                >
+                    ${this.escapeHtml(label)}
+                </button>
+            `).join('');
+    }
+
+    availableSourceKeys(locations) {
+        const keys = new Set(['all']);
+        locations.forEach((location) => keys.add(this.locationSourceGroup(location)));
+
+        return [...keys];
+    }
+
+    joyitasChipMarkup(locations) {
+        if (!locations.some((location) => this.locationIsJoyita(location))) {
+            return '';
+        }
+
+        return `
+            <button
+                type="button"
+                class="mobile-map-app__chip mobile-map-app__chip--joyita ${this.joyitasOnly ? 'is-active' : ''}"
+                data-category-filter="__joyitas"
+                data-action="map-shell#applyCategoryFilter"
+            >
+                Joyitas
+            </button>
+        `;
     }
 
     availableCategoryKeys(locations) {
@@ -1265,10 +1327,12 @@ export default class extends Controller {
             if (this.hasWalkthroughTarget) {
                 this.walkthroughTarget.classList.add('is-hidden');
             }
+            this.element.classList.remove('is-walkthrough-active');
 
             return false;
         }
 
+        this.element.classList.add('is-walkthrough-active');
         this.walkthroughTarget.classList.remove('is-hidden');
         this.walkthroughTarget.classList.add('is-visible');
         this.runWalkthroughSequence();
@@ -1336,6 +1400,7 @@ export default class extends Controller {
         await new Promise((resolve) => window.setTimeout(resolve, 420));
         this.walkthroughTarget.classList.add('is-hidden');
         this.walkthroughTarget.classList.remove('is-leaving');
+        this.element.classList.remove('is-walkthrough-active');
         await this.afterLayoutSettles();
     }
 
@@ -1711,6 +1776,7 @@ export default class extends Controller {
                     </div>
                     <div class="map-shell__info-window-badge-stack">
                         ${categoryMarkup}
+                        ${this.locationIsJoyita(location) ? '<span class="map-shell__info-window-badge map-shell__info-window-badge--joyita">Joyita</span>' : ''}
                         <span class="map-shell__info-window-badge map-shell__info-window-badge--source ${sourceBadgeClass}">${sourceLabel}</span>
                         <span class="map-shell__info-window-badge ${statusClass}">${statusLabel}</span>
                     </div>
@@ -1778,7 +1844,7 @@ export default class extends Controller {
     }
 
     sourceTypeLabel(sourceType) {
-        if (sourceType === 'owner_registered') {
+        if (['owner_registered', 'claimed', 'admin_curated'].includes(sourceType)) {
             return 'Real';
         }
 
@@ -1794,7 +1860,7 @@ export default class extends Controller {
     }
 
     sourceBadgeClass(location) {
-        if (location.source_type === 'owner_registered') {
+        if (['owner_registered', 'claimed', 'admin_curated'].includes(location.source_type)) {
             return 'source-badge--real';
         }
 
@@ -2003,6 +2069,26 @@ export default class extends Controller {
                 <span>${this.escapeHtml(this.categoryDisplayName(categoryKey))}</span>
             </div>
         `;
+    }
+
+    locationIsJoyita(location) {
+        return location.is_joyita === true || location.gem_status === 'approved';
+    }
+
+    locationSourceGroup(location) {
+        return location.source_type === 'google_places' ? 'google' : 'mimonchis';
+    }
+
+    joyitaBadgeMarkup(location) {
+        if (!this.locationIsJoyita(location)) {
+            return '';
+        }
+
+        const tags = Array.isArray(location.gem_reason_tags) && location.gem_reason_tags.length > 0
+            ? ` · ${location.gem_reason_tags.slice(0, 2).map((tag) => this.escapeHtml(tag)).join(' · ')}`
+            : '';
+
+        return `<div class="mobile-map-card__joyita">Joyita${tags}</div>`;
     }
 
     markerIcon(google, location) {
@@ -2365,6 +2451,67 @@ export default class extends Controller {
         return Number.isInteger(Number(location.location_id)) && location.source_type !== 'google_places';
     }
 
+    acceptCookiesFromProfile() {
+        this.storeCookieConsent('all');
+        this.renderCookieConsentStatus();
+        document.querySelector('[data-controller~="cookie-consent"]')?.classList.add('is-hidden');
+    }
+
+    rejectCookiesFromProfile() {
+        this.storeCookieConsent('essential');
+        this.renderCookieConsentStatus();
+        document.querySelector('[data-controller~="cookie-consent"]')?.classList.add('is-hidden');
+    }
+
+    resetCookiesFromProfile() {
+        try {
+            window.localStorage.removeItem('mi_monchis_cookie_consent');
+        } catch (error) {
+            // No bloquear UX si storage falla.
+        }
+
+        this.renderCookieConsentStatus();
+        document.querySelector('[data-controller~="cookie-consent"]')?.classList.remove('is-hidden');
+    }
+
+    renderCookieConsentStatus() {
+        if (!this.hasCookieConsentStatusTarget) {
+            return;
+        }
+
+        const consent = this.readCookieConsent();
+        if (!consent) {
+            this.cookieConsentStatusTarget.textContent = 'Sin decisión registrada en este dispositivo.';
+            return;
+        }
+
+        this.cookieConsentStatusTarget.textContent = consent.scope === 'all'
+            ? 'Aceptaste cookies esenciales y analítica.'
+            : 'Solo cookies esenciales activas.';
+    }
+
+    storeCookieConsent(scope) {
+        try {
+            window.localStorage.setItem('mi_monchis_cookie_consent', JSON.stringify({
+                scope,
+                version: 'v1.0',
+                decided_at: new Date().toISOString(),
+            }));
+        } catch (error) {
+            // No bloquear UX si storage falla.
+        }
+    }
+
+    readCookieConsent() {
+        try {
+            const rawConsent = window.localStorage.getItem('mi_monchis_cookie_consent');
+
+            return rawConsent ? JSON.parse(rawConsent) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
     addressLine(address) {
         const parts = [];
 
@@ -2704,6 +2851,7 @@ export default class extends Controller {
                     <span>${this.escapeHtml(ratingLabel)}</span>
                     <span>${this.escapeHtml(location.short_address ?? 'Dirección pendiente')}</span>
                 </div>
+                ${this.locationIsJoyita(location) ? `<div class="mobile-map-app__detail-joyita">${this.escapeHtml(this.joyitaDetailLabel(location))}</div>` : ''}
                 ${hoursSummary ? `<p class="mobile-map-app__detail-note">${this.escapeHtml(hoursSummary)}</p>` : ''}
                 ${reviewSnippet ? `<blockquote class="mobile-map-app__detail-review">${this.escapeHtml(reviewSnippet)}</blockquote>` : ''}
                 <div class="mobile-map-app__detail-actions">
@@ -2712,6 +2860,7 @@ export default class extends Controller {
                     ${claimUrl ? `<a href="${this.escapeHtml(claimUrl)}" data-action="click->map-shell#trackExternalAction" data-event-name="public_claim_started" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Reclamar</a>` : ''}
                     ${canFavorite ? `<button type="button" class="${isFavorite ? 'is-active' : ''}" data-action="click->map-shell#toggleFavoriteFromSheet" data-location-id="${this.escapeHtml(String(location.location_id))}">${isFavorite ? 'Quitar favorito' : 'Guardar favorito'}</button>` : ''}
                 </div>
+                ${!canFavorite && location.source_type === 'google_places' ? '<p class="mobile-map-app__detail-policy">Los lugares de Google se pueden reclamar antes de guardarse como favorito en Mi Monchis.</p>' : ''}
             </div>
         `;
 
@@ -2747,6 +2896,14 @@ export default class extends Controller {
         this.refreshDetailSheet();
     }
 
+    joyitaDetailLabel(location) {
+        const tags = Array.isArray(location.gem_reason_tags) && location.gem_reason_tags.length > 0
+            ? `: ${location.gem_reason_tags.slice(0, 3).join(' · ')}`
+            : '';
+
+        return `Joyita editorial${tags}`;
+    }
+
     trackExternalAction(event) {
         const entityIdRaw = event.currentTarget.dataset.entityId ?? '';
         const locationKey = event.currentTarget.dataset.locationKey ?? '';
@@ -2769,6 +2926,10 @@ export default class extends Controller {
             return;
         }
 
+        if (!this.analyticsConsentGranted()) {
+            return;
+        }
+
         try {
             await fetch(this.eventLogUrlValue, {
                 method: 'POST',
@@ -2786,5 +2947,9 @@ export default class extends Controller {
         } catch (error) {
             // No bloquear UX por fallas de analítica.
         }
+    }
+
+    analyticsConsentGranted() {
+        return this.readCookieConsent()?.scope === 'all';
     }
 }

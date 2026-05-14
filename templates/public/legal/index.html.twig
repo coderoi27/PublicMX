@@ -1,0 +1,32 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Legal | Mi Monchis MX{% endblock %}
+
+{% block body %}
+    <main class="legal-center">
+        <section class="legal-center__card">
+            <p class="legal-center__eyebrow">Centro legal</p>
+            <h1>Documentos de Mi Monchis MX</h1>
+            <p class="legal-center__intro">Consulta privacidad, cookies, términos, reglas de comunidad y disclaimers del alpha.</p>
+
+            <div class="legal-center__grid">
+                {% for document in documents %}
+                    <a href="{{ path('public_legal_show', { slug: document.slug }) }}" class="legal-center__document-card">
+                        <span>{{ document.version_label }}</span>
+                        <strong>{{ document.title }}</strong>
+                        {% if document.summary %}
+                            <p>{{ document.summary }}</p>
+                        {% endif %}
+                    </a>
+                {% else %}
+                    <article class="legal-center__document-card">
+                        <strong>Documentos no disponibles</strong>
+                        <p>Configura `CORE_API_BASE_URL` o publica documentos desde Admin.</p>
+                    </article>
+                {% endfor %}
+            </div>
+
+            <a href="{{ path('public_home') }}" class="legal-center__back">Volver a Mi Monchis</a>
+        </section>
+    </main>
+{% endblock %}

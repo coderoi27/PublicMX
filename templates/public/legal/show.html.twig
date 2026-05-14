@@ -1,21 +1,21 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ document.title }} | Mi Monchis MX{% endblock %}
+{% block title %}{{ document.title|default('Documento legal') }} | Mi Monchis MX{% endblock %}
 
 {% block body %}
     <main class="legal-center">
         <article class="legal-center__card legal-center__card--document">
             <a href="{{ path('public_legal_index') }}" class="legal-center__back">← Centro legal</a>
-            <p class="legal-center__eyebrow">{{ document.version_label }}</p>
-            <h1>{{ document.title }}</h1>
-            {% if document.summary %}
+            <p class="legal-center__eyebrow">{{ document.version_label|default('v1.0') }}</p>
+            <h1>{{ document.title|default('Documento legal') }}</h1>
+            {% if document.summary|default('') %}
                 <p class="legal-center__intro">{{ document.summary }}</p>
             {% endif %}
             <div class="legal-center__body">
-                {{ document.body|nl2br }}
+                {{ document.body|default('Este documento legal aún no está publicado. Intenta nuevamente más tarde.')|nl2br }}
             </div>
             <footer class="legal-center__footer">
-                <span>Actualizado: {{ document.updated_at|date('d/m/Y') }}</span>
+                <span>Actualizado: {{ document.updated_at|default('now')|date('d/m/Y') }}</span>
                 {% include 'public/_partials/legal_links.html.twig' %}
             </footer>
         </article>

@@ -1,0 +1,17 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Página no encontrada | Mi Monchis MX{% endblock %}
+
+{% block body %}
+    <main class="error-page">
+        <section class="error-page__card">
+            <p class="error-page__eyebrow">Error 404</p>
+            <h1>Esta ruta no existe</h1>
+            <p>La página que buscas no está disponible o cambió de ubicación.</p>
+            <div class="error-page__actions">
+                <a href="{{ path('public_home') }}">Explorar Mi Monchis</a>
+                <a href="{{ path('public_legal_index') }}">Centro legal</a>
+            </div>
+        </section>
+    </main>
+{% endblock %}

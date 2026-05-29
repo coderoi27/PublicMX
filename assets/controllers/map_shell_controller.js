@@ -11,8 +11,8 @@ export default class extends Controller {
         'mapStage',
         'exploreList',
         'exploreListGrid',
-        'mapModeButton',
-        'listModeButton',
+        'modeToggleButton',
+        'heroLocationDesktop',
         'exploreSection',
         'favoritesSection',
         'addressesSection',
@@ -24,6 +24,7 @@ export default class extends Controller {
         'detailSheet',
         'detailSheetBody',
         'heroLocation',
+        'sourceFilterRow',
         'chipRow',
         'categoryChip',
         'notificationsButton',
@@ -325,6 +326,14 @@ export default class extends Controller {
         this.renderExploreMode();
     }
 
+    toggleMapListMode() {
+        if (this.exploreMode === 'map') {
+            this.setListMode();
+        } else {
+            this.setMapMode();
+        }
+    }
+
     closeLocationSwitcherOnOutsideClick(event) {
         if (!this.locationSwitcherOpen || !this.hasLocationSwitcherTarget || !this.hasLocationSwitcherButtonTarget) {
             return;
@@ -543,6 +552,7 @@ export default class extends Controller {
 
             const payload = await response.json();
             this.registerCategoryCatalog(payload.meta?.category_catalog ?? []);
+            this.googlePlacesProxyEnabled = payload.meta?.plugins?.google_places_proxy === true;
             const canonicalLocations = Array.isArray(payload.data) ? payload.data : [];
             let locations = canonicalLocations;
             this.currentFeedSource = 'canonical';
@@ -556,8 +566,21 @@ export default class extends Controller {
             }
 
             this.currentLocations = locations;
-            this.renderCategoryChips(locations);
-            const filteredLocations = this.filteredLocations(locations);
+            
+            const userPosition = this.currentUserPosition();
+            if (Number.isFinite(userPosition.lat) && Number.isFinite(userPosition.lng)) {
+                this.currentLocations.forEach(loc => {
+                    const lat = loc.latitude ?? loc.lat;
+                    const lng = loc.longitude ?? loc.lng;
+                    if (lat !== undefined && lng !== undefined) {
+                        loc.distance_meters = this.distanceMeters(userPosition.lat, userPosition.lng, lat, lng);
+                    }
+                });
+                this.currentLocations.sort((a, b) => (a.distance_meters ?? Infinity) - (b.distance_meters ?? Infinity));
+            }
+
+            this.renderCategoryChips(this.currentLocations);
+            const filteredLocations = this.filteredLocations(this.currentLocations);
             this.visibleLocations = filteredLocations;
             const selectedLocation = filteredLocations.find((location) => this.locationKey(location) === this.selectedLocationId) ?? filteredLocations[0] ?? null;
             this.selectedLocationId = selectedLocation ? this.locationKey(selectedLocation) : null;
@@ -600,7 +623,7 @@ export default class extends Controller {
         } else {
             this.activeCategoryFilter = nextFilter;
         }
-        this.renderCategoryChips();
+        this.renderCategoryChips(this.currentLocations);
 
         this.visibleLocations = this.filteredLocations(this.currentLocations);
         const selectedStillVisible = this.visibleLocations.find((location) => this.locationKey(location) === this.selectedLocationId);
@@ -632,30 +655,30 @@ export default class extends Controller {
                 <div class="mobile-map-card__media mobile-map-card__media--${this.mediaTone(location)} ${location.photo_url ? 'has-photo' : ''}" ${this.mediaStyle(location)}>
                     ${this.canFavorite(location) ? this.favoriteButtonMarkup(Number(location.location_id)) : ''}
                     <span class="mobile-map-card__source-badge ${this.sourceBadgeClass(location)}">${this.escapeHtml(this.sourceTypeLabel(location.source_type))}</span>
-                    <div class="mobile-map-card__distance">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 3.5 19 7v10l-7 3.5L5 17V7l7-3.5Z"></path>
-                            <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z"></path>
-                        </svg>
-                        ${this.formatDistance(location.distance_meters)}
-                    </div>
                     <div class="mobile-map-card__media-copy">
                         <span>${this.escapeHtml((location.merchant_name ?? 'M').slice(0, 1).toUpperCase())}</span>
                     </div>
                 </div>
                 <div class="mobile-map-card__body">
+                    <div class="mobile-map-card__floating-badges">
+                        <div class="mobile-map-card__badge mobile-map-card__badge--distance">
+                            ${this.formatDistance(location.distance_meters)}
+                        </div>
+                        ${(location.rating || location.meta?.rating) ? `
+                        <div class="mobile-map-card__badge mobile-map-card__badge--rating">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            ${location.rating ?? location.meta.rating}${location.user_rating_count ? ` (${location.user_rating_count})` : ''}
+                        </div>
+                        ` : ''}
+                    </div>
                     <h3>${this.escapeHtml(location.location_name ?? 'Sin nombre')}</h3>
-                    <p>${this.escapeHtml(this.cardSubtitle(location))}</p>
-                    ${this.joyitaBadgeMarkup(location)}
+                    <p class="mobile-map-card__address">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z"/></svg>
+                        <span class="mobile-map-card__address-text">${this.escapeHtml(this.cardSubtitle(location))}</span>
+                    </p>
                     ${this.categoryTagMarkup(location)}
                     <div class="mobile-map-card__meta">
                         <span class="mobile-map-card__status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
-                        <span class="mobile-map-card__reviews">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 17.1 6.8 19.8l1-5.8-4.2-4.1 5.8-.8L12 3.8Z"></path>
-                            </svg>
-                            ${this.escapeHtml(this.reviewsLabel(location))}
-                        </span>
                     </div>
                 </div>
             </article>
@@ -700,20 +723,23 @@ export default class extends Controller {
         });
     }
 
-    renderCategoryChips(locations = this.currentLocations) {
-        if (!this.hasChipRowTarget) {
+    renderCategoryChips(locations) {
+        if (!this.hasChipRowTarget || !this.hasSourceFilterRowTarget) {
             return;
         }
 
         const categoryKeys = this.availableCategoryKeys(locations);
-        if (!categoryKeys.includes(this.activeCategoryFilter)) {
+        if (!categoryKeys.includes(this.activeCategoryFilter) && this.activeCategoryFilter !== 'all') {
             this.activeCategoryFilter = 'all';
         }
+
         if (!this.availableSourceKeys(locations).includes(this.activeSourceFilter)) {
             this.activeSourceFilter = 'all';
         }
 
-        this.chipRowTarget.innerHTML = this.sourceFilterChipMarkup(locations) + categoryKeys.map((categoryKey) => {
+        this.sourceFilterRowTarget.innerHTML = this.sourceFilterSegmentedMarkup(locations);
+
+        this.chipRowTarget.innerHTML = categoryKeys.map((categoryKey) => {
             const label = categoryKey === 'all' ? 'Todos' : this.categoryDisplayName(categoryKey);
             const chipStyle = categoryKey === 'all'
                 ? ''
@@ -734,33 +760,34 @@ export default class extends Controller {
         }).join('') + this.joyitasChipMarkup(locations);
     }
 
-    sourceFilterChipMarkup(locations) {
+    sourceFilterSegmentedMarkup(locations) {
         const availableSources = this.availableSourceKeys(locations);
-        const chips = [
-            ['all', 'Todas las fuentes', true],
-            ['mimonchis', 'Mi Monchis', availableSources.includes('mimonchis')],
-            ['google', 'Google', availableSources.includes('google')],
+        if (availableSources.length <= 1) {
+            return '';
+        }
+
+        const sources = [
+            ['all', 'Todas las fuentes'],
+            ['mimonchis', 'Mi Monchis'],
+            ['google', 'Google'],
         ];
 
-        return chips
-            .filter(([, , isVisible]) => isVisible)
+        return sources
             .map(([sourceKey, label]) => `
                 <button
                     type="button"
-                    class="mobile-map-app__chip mobile-map-app__chip--source ${this.activeSourceFilter === sourceKey ? 'is-active' : ''}"
+                    class="mobile-map-app__segmented-btn ${this.activeSourceFilter === sourceKey ? 'is-active' : ''}"
                     data-category-filter="__source:${this.escapeHtml(sourceKey)}"
                     data-action="map-shell#applyCategoryFilter"
                 >
                     ${this.escapeHtml(label)}
                 </button>
-            `).join('');
+            `)
+            .join('');
     }
 
     availableSourceKeys(locations) {
-        const keys = new Set(['all']);
-        locations.forEach((location) => keys.add(this.locationSourceGroup(location)));
-
-        return [...keys];
+        return ['all', 'mimonchis', 'google'];
     }
 
     joyitasChipMarkup(locations) {
@@ -799,7 +826,7 @@ export default class extends Controller {
     }
 
     shouldFetchGooglePlaces() {
-        return this.hasUserCoordinates() && this.googleMapsApiKeyValue && this.googleMapsApiKeyValue.trim() !== '';
+        return this.hasUserCoordinates() && this.googlePlacesProxyEnabled;
     }
 
     mergeLocationsWithGooglePlaces(canonicalLocations, googleLocations) {
@@ -1189,7 +1216,7 @@ export default class extends Controller {
     }
 
     async discoverPlacesFromViewport() {
-        if (!this.map || this.isSyncingMapViewport || this.isDiscoveringPlaces || !this.shouldFetchGooglePlaces()) {
+        if (!this.map || this.isSyncingMapViewport || this.isDiscoveringPlaces) {
             return;
         }
 
@@ -1202,6 +1229,22 @@ export default class extends Controller {
             lat: center.lat(),
             lng: center.lng(),
         };
+
+        this.currentLocations.forEach(loc => {
+            const lat = loc.latitude ?? loc.lat;
+            const lng = loc.longitude ?? loc.lng;
+            if (lat !== undefined && lng !== undefined) {
+                loc.distance_meters = this.distanceMeters(centerPosition.lat, centerPosition.lng, lat, lng);
+            }
+        });
+        this.currentLocations.sort((a, b) => (a.distance_meters ?? Infinity) - (b.distance_meters ?? Infinity));
+        
+        this.visibleLocations = this.filteredLocations(this.currentLocations);
+        this.renderList(this.visibleLocations);
+
+        if (!this.shouldFetchGooglePlaces()) {
+            return;
+        }
 
         if (this.lastDiscoveryCenter) {
             const traveledMeters = this.distanceMeters(
@@ -1538,69 +1581,40 @@ export default class extends Controller {
     }
 
     async fetchNearbyPlacesFallback(searchCenter = null) {
-        const google = await this.loadGoogleMaps();
-        if (!google.maps.places?.PlacesService || !this.hasUserCoordinates()) {
-            return [];
-        }
-
-        const serviceNode = this.nearbyPlacesNode ?? document.createElement('div');
-        this.nearbyPlacesNode = serviceNode;
-        const service = this.nearbyPlacesService ?? new google.maps.places.PlacesService(serviceNode);
-        this.nearbyPlacesService = service;
         const userPosition = this.currentUserPosition();
         const center = searchCenter && Number.isFinite(searchCenter.lat) && Number.isFinite(searchCenter.lng)
             ? searchCenter
             : userPosition;
+            
+        if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng)) {
+            return [];
+        }
 
-        return new Promise((resolve, reject) => {
-            service.nearbySearch({
-                location: center,
-                radius: 2200,
-                type: 'restaurant',
-                language: 'es',
-            }, (results, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-                    resolve([]);
-                    return;
-                }
+        const category = this.activeCategoryFilter && this.activeCategoryFilter !== 'Todos' ? this.activeCategoryFilter : 'Todos';
 
-                if (status !== google.maps.places.PlacesServiceStatus.OK || !Array.isArray(results)) {
-                    reject(new Error(this.googlePlacesStatusMessage(status)));
-                    return;
-                }
-
-                resolve(results.slice(0, 10).map((place, index) => {
-                    const lat = place.geometry?.location?.lat?.();
-                    const lng = place.geometry?.location?.lng?.();
-                    const photoUrl = Array.isArray(place.photos) && place.photos[0]?.getUrl
-                        ? place.photos[0].getUrl({ maxWidth: 1200, maxHeight: 900 })
-                        : null;
-
-                    return {
-                        selection_key: `place:${place.place_id ?? index}`,
-                        place_id: place.place_id ?? null,
-                        location_id: null,
-                        merchant_name: place.name ?? 'Lugar cercano',
-                        location_name: place.name ?? 'Lugar cercano',
-                        lat: Number(lat),
-                        lng: Number(lng),
-                        short_address: place.vicinity ?? 'Dirección no disponible',
-                        distance_meters: Number.isFinite(lat) && Number.isFinite(lng)
-                            ? this.distanceMeters(userPosition.lat, userPosition.lng, Number(lat), Number(lng))
-                            : null,
-                        whatsapp_enabled: false,
-                        whatsapp_e164: null,
-                        source_type: 'google_places',
-                        publication_state: 'fallback_visible',
-                        open_now: place.opening_hours?.open_now ?? null,
-                        rating: typeof place.rating === 'number' ? place.rating : null,
-                        user_ratings_total: typeof place.user_ratings_total === 'number' ? place.user_ratings_total : null,
-                        types: Array.isArray(place.types) ? place.types : [],
-                        photo_url: photoUrl,
-                    };
-                }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng)));
-            });
-        });
+        try {
+            const response = await fetch(`/api/explore/places?lat=${center.lat}&lng=${center.lng}&category=${encodeURIComponent(category)}`);
+            if (!response.ok) {
+                return [];
+            }
+            const payload = await response.json();
+            if (!payload.data || !Array.isArray(payload.data)) {
+                return [];
+            }
+            
+            return payload.data.map((place) => {
+                return {
+                    ...place,
+                    selection_key: place.location_id,
+                    distance_meters: this.distanceMeters(userPosition.lat, userPosition.lng, place.lat, place.lng),
+                    lat: place.lat,
+                    lng: place.lng,
+                };
+            }).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng));
+        } catch (error) {
+            console.error('Error fetching proxy places:', error);
+            return [];
+        }
     }
 
     async resolveWalkthroughSelection(address) {
@@ -1717,7 +1731,9 @@ export default class extends Controller {
         if (this.hasHeroLocationTarget && label) {
             this.heroLocationTarget.textContent = label;
         }
-
+        if (this.hasHeroLocationDesktopTarget && label) {
+            this.heroLocationDesktopTarget.textContent = label;
+        }
         if (label) {
             this.currentLocationLabel = label;
             this.persistLocationContext();
@@ -2256,11 +2272,13 @@ export default class extends Controller {
         if (this.hasExploreListTarget) {
             this.exploreListTarget.classList.toggle('is-hidden', isMapMode);
         }
-        if (this.hasMapModeButtonTarget) {
-            this.mapModeButtonTarget.classList.toggle('is-active', isMapMode);
-        }
-        if (this.hasListModeButtonTarget) {
-            this.listModeButtonTarget.classList.toggle('is-active', !isMapMode);
+        
+        if (this.hasModeToggleButtonTarget) {
+            const iconList = this.modeToggleButtonTarget.querySelector('.icon-list');
+            const iconMap = this.modeToggleButtonTarget.querySelector('.icon-map');
+            if (iconList) iconList.classList.toggle('is-hidden', !isMapMode);
+            if (iconMap) iconMap.classList.toggle('is-hidden', isMapMode);
+            this.modeToggleButtonTarget.classList.toggle('is-active', isMapMode);
         }
     }
 
@@ -2370,6 +2388,9 @@ export default class extends Controller {
             if (this.hasHeroLocationTarget) {
                 this.heroLocationTarget.textContent = this.currentLocationLabel;
             }
+            if (this.hasHeroLocationDesktopTarget) {
+                this.heroLocationDesktopTarget.textContent = this.currentLocationLabel;
+            }
             return;
         }
 
@@ -2377,6 +2398,9 @@ export default class extends Controller {
             this.currentLocationLabel = 'Ubicación actual';
             if (this.hasHeroLocationTarget) {
                 this.heroLocationTarget.textContent = this.currentLocationLabel;
+            }
+            if (this.hasHeroLocationDesktopTarget) {
+                this.heroLocationDesktopTarget.textContent = this.currentLocationLabel;
             }
         }
     }
@@ -2416,11 +2440,20 @@ export default class extends Controller {
     }
 
     distanceMeters(lat1, lng1, lat2, lng2) {
+        const nLat1 = Number(lat1);
+        const nLng1 = Number(lng1);
+        const nLat2 = Number(lat2);
+        const nLng2 = Number(lng2);
+
+        if (!Number.isFinite(nLat1) || !Number.isFinite(nLng1) || !Number.isFinite(nLat2) || !Number.isFinite(nLng2)) {
+            return null;
+        }
+
         const earthRadius = 6371000;
-        const dLat = this.degToRad(lat2 - lat1);
-        const dLng = this.degToRad(lng2 - lng1);
+        const dLat = this.degToRad(nLat2 - nLat1);
+        const dLng = this.degToRad(nLng2 - nLng1);
         const a = Math.sin(dLat / 2) ** 2
-            + Math.cos(this.degToRad(lat1)) * Math.cos(this.degToRad(lat2)) * Math.sin(dLng / 2) ** 2;
+            + Math.cos(this.degToRad(nLat1)) * Math.cos(this.degToRad(nLat2)) * Math.sin(dLng / 2) ** 2;
 
         return Math.round(earthRadius * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))));
     }
@@ -2643,8 +2676,8 @@ export default class extends Controller {
     }
 
     formatDistance(distanceMeters) {
-        if (distanceMeters == null) {
-            return 'Cerca';
+        if (distanceMeters == null || !Number.isFinite(distanceMeters)) {
+            return '';
         }
 
         if (distanceMeters >= 1000) {

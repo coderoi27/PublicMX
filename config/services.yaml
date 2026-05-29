@@ -56,5 +56,10 @@ services:
         arguments:
             $coreApiBaseUrl: '%app.core_api_base_url%'
 
+    App\Service\Public\GooglePlacesClient:
+        arguments:
+            $googlePlacesApiKey: '%app.google_maps_api_key%'
+            $requestStack: '@request_stack'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

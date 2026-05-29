@@ -7,6 +7,10 @@ framework:
         cookie_secure: auto
         cookie_samesite: lax
         cookie_httponly: true
+        name: PUBLICSESSID
+        cookie_lifetime: 604800
+        gc_maxlifetime: 604800
+        handler_id: null
 
     #esi: true
     #fragments: true

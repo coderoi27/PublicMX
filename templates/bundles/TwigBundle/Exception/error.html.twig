@@ -1,0 +1,24 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Algo salió mal | Mi Monchis MX{% endblock %}
+
+{% block body %}
+    <main class="error-page">
+        <section class="error-page__card">
+            <p class="error-page__eyebrow">Mi Monchis MX</p>
+            <h1>No pudimos completar esta acción</h1>
+            <p>
+                La webapp tuvo un problema temporal. Puedes volver al inicio e intentarlo nuevamente.
+                Si el problema continúa, avísanos para revisarlo.
+            </p>
+            <div class="error-page__meta">
+                <span>Error {{ status_code|default(500) }}</span>
+                <span>{{ status_text|default('Error interno') }}</span>
+            </div>
+            <div class="error-page__actions">
+                <a href="{{ path('public_home') }}">Volver al inicio</a>
+                <a href="{{ path('public_legal_show', { slug: 'disclaimer-terceros' }) }}">Ver aviso de terceros</a>
+            </div>
+        </section>
+    </main>
+{% endblock %}

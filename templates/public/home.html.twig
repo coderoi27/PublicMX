@@ -79,56 +79,84 @@
             </div>
 
             <header class="mobile-map-app__header">
-                <div class="mobile-map-app__header-copy">
+                <div class="mobile-map-app__header-top">
+                    <button type="button" class="mobile-map-app__icon-button mobile-map-app__icon-button--menu" aria-label="Menú">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
+                            <path d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                    
+                    <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis MX" class="mobile-map-app__brand-logo">
+                    
+                    <div class="mobile-map-app__header-actions">
+                        <strong class="mobile-map-app__desktop-explore-title">Explorar</strong>
+
+                        <div class="mobile-map-app__location-display is-desktop-only" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
+                            <svg class="mobile-map-app__pin-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
+                            </svg>
+                            <span class="mobile-map-app__location-label" data-map-shell-target="heroLocationDesktop">{{ hero_location_label }}</span>
+                        </div>
+                        
+                        <div class="mobile-map-app__service-dropdown-container is-desktop-only">
+                            <button
+                                type="button"
+                                class="mobile-map-app__service-pill"
+                                data-action="click->map-shell#toggleLocationSwitcher"
+                            >
+                                <span class="mobile-map-app__service-label">Servicio a domicilio</span>
+                                <svg class="mobile-map-app__service-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <button type="button" class="mobile-map-app__icon-button mobile-map-app__icon-button--notify" aria-label="Notificaciones" data-map-shell-target="notificationsButton" data-action="map-shell#toggleNotifications">
+                            <span class="mobile-map-app__notify-badge" data-map-shell-target="notificationsBadge">1</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                        </button>
+                        <div class="mobile-map-app__notifications is-hidden" data-map-shell-target="notificationsPanel">
+                            <p class="mobile-map-app__notifications-title">Notificaciones</p>
+                            <a href="{{ path('public_register') }}" class="mobile-map-app__notification-item">
+                                <strong>Completa tu cuenta</strong>
+                                <span>Registrate para disfrutar de las bondades de este directorio digital</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mobile-map-app__header-bottom is-mobile-only">
+                    <div class="mobile-map-app__location-display" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
+                        <svg class="mobile-map-app__pin-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
+                        </svg>
+                        <span class="mobile-map-app__location-label" data-map-shell-target="heroLocation">{{ hero_location_label }}</span>
+                    </div>
+                    
                     <button
                         type="button"
-                        class="mobile-map-app__brand-button"
+                        class="mobile-map-app__service-pill"
                         data-action="click->map-shell#toggleLocationSwitcher"
                         data-map-shell-target="locationSwitcherButton"
                     >
-                        <span>Mi ubi</span>
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m6 9 6 6 6-6" />
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                         </svg>
+                        <span>Servicio a domicilio</span>
                     </button>
-                    <div class="mobile-map-app__location-row">
-                        <span class="mobile-map-app__pin">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
-                            </svg>
-                        </span>
-                        <span class="mobile-map-app__location-label" data-map-shell-target="heroLocation">{{ hero_location_label }}</span>
-                    </div>
                 </div>
+                
                 <div class="mobile-map-app__location-switcher is-hidden" data-map-shell-target="locationSwitcher">
                     {# El contenido se renderiza dinámicamente desde el controlador Stimulus #}
-                </div>
-
-                <div class="mobile-map-app__header-actions">
-                    <button type="button" class="mobile-map-app__icon-button mobile-map-app__icon-button--notify" aria-label="Notificaciones" data-map-shell-target="notificationsButton" data-action="map-shell#toggleNotifications">
-                        <span class="mobile-map-app__notify-badge" data-map-shell-target="notificationsBadge">1</span>
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6 16.5h12" />
-                            <path d="M8 16.5V11a4 4 0 1 1 8 0v5.5" />
-                            <path d="M9.5 19a2.5 2.5 0 0 0 5 0" />
-                        </svg>
-                    </button>
-                    <div class="mobile-map-app__notifications is-hidden" data-map-shell-target="notificationsPanel">
-                        <p class="mobile-map-app__notifications-title">Notificaciones</p>
-                        <a href="{{ path('public_register') }}" class="mobile-map-app__notification-item">
-                            <strong>Completa tu cuenta</strong>
-                            <span>Registrate para disfrutar de las bondades de este directorio digital</span>
-                        </a>
-                    </div>
                 </div>
             </header>
 
             <section class="mobile-map-app__explore-shell" data-map-shell-target="exploreSection">
                 <section class="mobile-map-app__explore-toolbar">
-                    <div class="mobile-map-app__mode-toggle">
-                        <button type="button" class="mobile-map-app__mode-button is-active" data-map-shell-target="mapModeButton" data-action="map-shell#setMapMode">Mapa</button>
-                        <button type="button" class="mobile-map-app__mode-button" data-map-shell-target="listModeButton" data-action="map-shell#setListMode">Listado</button>
-                    </div>
+                    <!-- Segmented control eliminado por solicitud del usuario, la alternancia ahora la hace el botón del tabbar -->
                     <p class="mobile-map-app__explore-caption">
                         <strong>Explorar</strong>
                         <span data-map-shell-target="status">Cargando feed canonico...</span>
@@ -147,7 +175,10 @@
                         Intentando cargar Google Maps...
                     </div>
 
-                    <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRow"></div>
+                    <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRowContainer">
+                        <div class="mobile-map-app__source-segmented-control" data-map-shell-target="sourceFilterRow"></div>
+                        <div style="display: contents;" data-map-shell-target="chipRow"></div>
+                    </div>
 
                     <div class="mobile-map-app__floating-controls">
                         <div class="mobile-map-app__zoom-stack">
@@ -385,42 +416,47 @@
 
             <nav class="mobile-map-app__nav">
                 <button type="button" class="mobile-map-app__nav-item is-active" data-map-shell-target="exploreTabButton" data-action="map-shell#showExploreSection">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 10.5 12 4l8 6.5V20H4v-9.5Z" />
-                        <path d="M9.5 20v-5.5h5V20" />
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                     <span>Explorar</span>
                 </button>
                 <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="favoritesTabButton" data-action="map-shell#showFavoritesSection">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 21s-7-4.4-9.2-8.5C.9 9.1 2.3 5 6.3 5c2.2 0 3.6 1.3 4.4 2.4C11.5 6.3 12.9 5 15.1 5c4 0 5.4 4.1 3.5 7.5C16.4 16.6 12 21 12 21Z" />
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                     </svg>
                     <span>Favoritos</span>
                 </button>
-                <button type="button" class="mobile-map-app__nav-item mobile-map-app__nav-item--center" data-action="map-shell#detectLocation">
+                <button type="button" class="mobile-map-app__nav-item mobile-map-app__nav-item--center" data-action="map-shell#toggleMapListMode" data-map-shell-target="modeToggleButton">
                     <span class="mobile-map-app__nav-core">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 4v3" />
-                            <path d="M12 17v3" />
-                            <path d="M4 12h3" />
-                            <path d="M17 12h3" />
-                            <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-                            <path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+                        <!-- Icono por defecto (mostrando listado para cambiar a listado cuando está en mapa) -->
+                        <svg class="icon-list" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        <svg class="icon-map is-hidden" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+                            <line x1="8" y1="2" x2="8" y2="18"></line>
+                            <line x1="16" y1="6" x2="16" y2="22"></line>
                         </svg>
                     </span>
                 </button>
                 <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="addressesTabButton" data-action="map-shell#showAddressesSection">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Z" />
-                        <path d="M12 12.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <span>Mis ubis</span>
                 </button>
                 <button type="button" class="mobile-map-app__nav-item" data-map-shell-target="profileTabButton" data-action="map-shell#showProfileSection">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 22a9 9 0 1 0-9-9 9 9 0 0 0 9 9Z" />
-                        <path d="M12 8.2a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z" />
-                        <path d="M7.5 18.3a5.4 5.4 0 0 1 9 0" />
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                     <span>Perfil</span>
                 </button>

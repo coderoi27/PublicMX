@@ -44,6 +44,7 @@ final class GooglePlacesProxyController extends AbstractController
         }
 
         $categoryCatalog = $feed['meta']['category_catalog'] ?? [];
+        $placeCategoryRules = $feed['meta']['place_category_rules'] ?? [];
         $blacklist = $feed['meta']['google_places_blacklist'] ?? [];
 
         // Cache the Google Places result based on coordinates (rounded to ~1km grid)
@@ -62,7 +63,7 @@ final class GooglePlacesProxyController extends AbstractController
                 continue;
             }
 
-            $mapped = $this->mapPlaceToCanonical($place, $categoryCatalog, $lat, $lng, $googleMapsApiKey);
+            $mapped = $this->mapPlaceToCanonical($place, $categoryCatalog, $placeCategoryRules, $lat, $lng, $googleMapsApiKey);
             if ($mapped !== null) {
                 $mappedPlaces[] = $mapped;
             }
@@ -71,39 +72,20 @@ final class GooglePlacesProxyController extends AbstractController
         return $this->json(['data' => $mappedPlaces]);
     }
 
-    private function mapPlaceToCanonical(array $place, array $categoryCatalog, float $originLat, float $originLng, string $apiKey): ?array
+    private function mapPlaceToCanonical(array $place, array $categoryCatalog, array $placeCategoryRules, float $originLat, float $originLng, string $apiKey): ?array
     {
         $types = $place['types'] ?? [];
+        $types = is_array($types) ? array_values(array_filter($types, 'is_string')) : [];
         $primaryType = $place['primaryType'] ?? ($types[0] ?? null);
 
-        if ($primaryType === null) {
+        if (!is_string($primaryType) || $primaryType === '') {
             return null;
         }
 
-        $matchedCategory = null;
-        foreach ($categoryCatalog as $category) {
-            $mappings = $category['google_place_type_mappings'] ?? [];
-            if (in_array($primaryType, $mappings, true)) {
-                $matchedCategory = $category;
-                break;
-            }
-            // Fallback to check all types if primary doesn't match
-            if ($matchedCategory === null && count(array_intersect($types, $mappings)) > 0) {
-                $matchedCategory = $category;
-            }
-        }
+        [$matchedCategory, $classifiedBy] = $this->matchCategory($place, $categoryCatalog, $placeCategoryRules, $primaryType, $types);
 
         if ($matchedCategory === null) {
-            // Default category fallback if none matched
-            foreach ($categoryCatalog as $category) {
-                if ($category['slug'] === 'antojos') {
-                    $matchedCategory = $category;
-                    break;
-                }
-            }
-            if ($matchedCategory === null && count($categoryCatalog) > 0) {
-                $matchedCategory = $categoryCatalog[0];
-            }
+            return null;
         }
 
         $placeLat = $place['location']['latitude'] ?? null;
@@ -143,6 +125,7 @@ final class GooglePlacesProxyController extends AbstractController
             'gem_status' => 'none',
             'is_joyita' => false,
             'gem_reason_tags' => [],
+            'classified_by' => $classifiedBy,
             'category_id' => $matchedCategory['id'] ?? null,
             'category_slug' => $matchedCategory['slug'] ?? null,
             'category_name' => $matchedCategory['name'] ?? null,
@@ -151,6 +134,108 @@ final class GooglePlacesProxyController extends AbstractController
             'category_default_photo_url' => $matchedCategory['default_photo_url'] ?? null,
             'category_cover_photo_url' => $matchedCategory['cover_photo_url'] ?? null,
         ];
+    }
+
+    private function matchCategory(array $place, array $categoryCatalog, array $placeCategoryRules, string $primaryType, array $types): array
+    {
+        $categoriesById = [];
+        foreach ($categoryCatalog as $category) {
+            if (isset($category['id'])) {
+                $categoriesById[(int) $category['id']] = $category;
+            }
+        }
+
+        foreach ($this->rulesByType($placeCategoryRules, 'google_type') as $rule) {
+            $category = $this->categoryForRule($rule, $categoriesById);
+            $matchValue = $this->ruleMatchValue($rule);
+
+            if ($category !== null && $matchValue !== '' && ($primaryType === $matchValue || in_array($matchValue, $types, true))) {
+                return [$category, 'google_type_rule'];
+            }
+        }
+
+        $placeName = $this->normalizeText((string) ($place['displayName']['text'] ?? ''));
+        $typeLabels = $this->normalizeText(sprintf(
+            '%s %s',
+            (string) ($place['primaryTypeDisplayName']['text'] ?? ''),
+            (string) ($place['googleMapsTypeLabel'] ?? '')
+        ));
+        foreach ($this->rulesByType($placeCategoryRules, 'name_keyword') as $rule) {
+            $category = $this->categoryForRule($rule, $categoriesById);
+            $matchValue = $this->normalizeText($this->ruleMatchValue($rule));
+
+            if ($category !== null && $matchValue !== '') {
+                if ($placeName !== '' && str_contains($placeName, $matchValue)) {
+                    return [$category, 'name_keyword_rule'];
+                }
+
+                if ($typeLabels !== '' && str_contains($typeLabels, $matchValue)) {
+                    return [$category, 'name_keyword_rule'];
+                }
+            }
+        }
+
+        foreach ($categoryCatalog as $category) {
+            $mappings = $category['google_place_type_mappings'] ?? [];
+            if (in_array($primaryType, $mappings, true)) {
+                return [$category, 'legacy_google_type_mapping'];
+            }
+            if (count(array_intersect($types, $mappings)) > 0) {
+                return [$category, 'legacy_google_type_mapping'];
+            }
+        }
+
+        foreach ($categoryCatalog as $category) {
+            if (($category['slug'] ?? null) === 'antojos') {
+                return [$category, 'fallback_antojos'];
+            }
+        }
+
+        if (count($categoryCatalog) > 0) {
+            return [$categoryCatalog[0], 'fallback_first_category'];
+        }
+
+        return [null, 'unclassified'];
+    }
+
+    private function rulesByType(array $rules, string $ruleType): array
+    {
+        return array_values(array_filter(
+            $rules,
+            static fn (array $rule): bool => ($rule['rule_type'] ?? null) === $ruleType
+        ));
+    }
+
+    private function categoryForRule(array $rule, array $categoriesById): ?array
+    {
+        $categoryId = isset($rule['category_id']) ? (int) $rule['category_id'] : null;
+        if ($categoryId === null || !isset($categoriesById[$categoryId])) {
+            return null;
+        }
+
+        return $categoriesById[$categoryId];
+    }
+
+    private function ruleMatchValue(array $rule): string
+    {
+        return (string) ($rule['match_value'] ?? '');
+    }
+
+    private function normalizeText(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = strtr($value, [
+            'á' => 'a',
+            'é' => 'e',
+            'í' => 'i',
+            'ó' => 'o',
+            'ú' => 'u',
+            'ü' => 'u',
+            'ñ' => 'n',
+        ]);
+        $value = preg_replace('/[^a-z0-9]+/u', ' ', $value) ?? '';
+
+        return trim($value);
     }
 
     private function distanceMeters(float $lat1, float $lng1, float $lat2, float $lng2): int

@@ -33,7 +33,7 @@ final class GooglePlacesClient
             $response = $this->httpClient->request('POST', 'https://places.googleapis.com/v1/places:searchNearby', [
                 'headers' => [
                     'X-Goog-Api-Key' => $this->googlePlacesApiKey,
-                    'X-Goog-FieldMask' => 'places.id,places.displayName,places.location,places.primaryType,places.types,places.formattedAddress,places.rating,places.userRatingCount,places.photos',
+                    'X-Goog-FieldMask' => 'places.id,places.displayName,places.location,places.primaryType,places.primaryTypeDisplayName,places.types,places.googleMapsTypeLabel,places.formattedAddress,places.rating,places.userRatingCount,places.photos',
                     'Referer' => $referer,
                 ],
                 'json' => [

@@ -91,7 +91,7 @@
                     <div class="mobile-map-app__header-actions">
                         <strong class="mobile-map-app__desktop-explore-title">Explorar</strong>
 
-                        <div class="mobile-map-app__location-display is-desktop-only" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
+                        <div class="mobile-map-app__location-display is-desktop-only" data-map-shell-target="switcherToggle" data-switcher-mode="locations" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
                             <svg class="mobile-map-app__pin-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                             </svg>
@@ -102,9 +102,11 @@
                             <button
                                 type="button"
                                 class="mobile-map-app__service-pill"
+                                data-map-shell-target="switcherToggle"
+                                data-switcher-mode="services"
                                 data-action="click->map-shell#toggleLocationSwitcher"
                             >
-                                <span class="mobile-map-app__service-label">Servicio a domicilio</span>
+                                <span class="mobile-map-app__service-label" data-map-shell-target="serviceFilterLabel">Todo</span>
                                 <svg class="mobile-map-app__service-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
@@ -129,7 +131,7 @@
                 </div>
 
                 <div class="mobile-map-app__header-bottom is-mobile-only">
-                    <div class="mobile-map-app__location-display" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
+                    <div class="mobile-map-app__location-display" data-map-shell-target="switcherToggle" data-switcher-mode="locations" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
                         <svg class="mobile-map-app__pin-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                         </svg>
@@ -139,13 +141,16 @@
                     <button
                         type="button"
                         class="mobile-map-app__service-pill"
+                        data-map-shell-target="switcherToggle"
+                        data-switcher-mode="services"
                         data-action="click->map-shell#toggleLocationSwitcher"
-                        data-map-shell-target="locationSwitcherButton"
                     >
                         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
+                            <path d="M5 7h14"></path>
+                            <path d="M7 12h10"></path>
+                            <path d="M10 17h4"></path>
                         </svg>
-                        <span>Servicio a domicilio</span>
+                        <span data-map-shell-target="serviceFilterLabel">Todo</span>
                     </button>
                 </div>
                 

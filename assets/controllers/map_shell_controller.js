@@ -29,8 +29,9 @@ export default class extends Controller {
         'categoryChip',
         'notificationsButton',
         'notificationsPanel',
-        'locationSwitcherButton',
+        'switcherToggle',
         'locationSwitcher',
+        'serviceFilterLabel',
         'notificationsBadge',
         'favoritesCount',
         'favoritesCountDuplicate',
@@ -94,6 +95,7 @@ export default class extends Controller {
         this.activeCategoryFilter = 'all';
         this.joyitasOnly = false;
         this.activeSourceFilter = 'all';
+        this.activeServiceFilter = 'all';
         this.map = null;
         this.markers = [];
         this.infoWindow = null;
@@ -107,6 +109,7 @@ export default class extends Controller {
         this.userMarker = null;
         this.notificationsOpen = false;
         this.locationSwitcherOpen = false;
+        this.locationSwitcherMode = 'locations';
         this.exploreMode = 'map';
         this.activeSection = 'explore';
         this.placeDetailsCache = new Map();
@@ -118,6 +121,7 @@ export default class extends Controller {
         this.restorePersistedLocationContext();
         this.renderFavoritesSummary();
         this.renderAddressesSummary();
+        this.renderServiceFilterSummary();
         this.renderCookieConsentStatus();
         this.renderExploreMode();
         this.renderActiveSection();
@@ -284,8 +288,14 @@ export default class extends Controller {
         }
     }
 
-    toggleLocationSwitcher() {
-        this.locationSwitcherOpen = !this.locationSwitcherOpen;
+    toggleLocationSwitcher(event) {
+        const requestedMode = event?.currentTarget?.dataset?.switcherMode ?? 'locations';
+        if (this.locationSwitcherOpen && this.locationSwitcherMode === requestedMode) {
+            this.locationSwitcherOpen = false;
+        } else {
+            this.locationSwitcherMode = requestedMode;
+            this.locationSwitcherOpen = true;
+        }
         this.renderLocationSwitcherState();
     }
 
@@ -335,12 +345,14 @@ export default class extends Controller {
     }
 
     closeLocationSwitcherOnOutsideClick(event) {
-        if (!this.locationSwitcherOpen || !this.hasLocationSwitcherTarget || !this.hasLocationSwitcherButtonTarget) {
+        if (!this.locationSwitcherOpen || !this.hasLocationSwitcherTarget) {
             return;
         }
 
         const clickedInsidePanel = this.locationSwitcherTarget.contains(event.target);
-        const clickedButton = this.locationSwitcherButtonTarget.contains(event.target);
+        const clickedButton = this.hasSwitcherToggleTarget
+            ? this.switcherToggleTargets.some((button) => button.contains(event.target))
+            : false;
         if (!clickedInsidePanel && !clickedButton) {
             this.locationSwitcherOpen = false;
             this.renderLocationSwitcherState();
@@ -359,6 +371,29 @@ export default class extends Controller {
         this.logInteraction('public_saved_address_selected', 'user_address', Number(event.currentTarget.dataset.addressId ?? 0) || null, {
             label,
         });
+    }
+
+    async selectServiceFilter(event) {
+        const nextFilter = event.currentTarget.dataset.serviceFilter ?? 'all';
+        this.activeServiceFilter = nextFilter;
+        this.locationSwitcherOpen = false;
+        this.renderLocationSwitcherState();
+        this.renderServiceFilterSummary();
+
+        this.visibleLocations = this.filteredLocations(this.currentLocations);
+        const selectedStillVisible = this.visibleLocations.find((location) => this.locationKey(location) === this.selectedLocationId);
+        if (!selectedStillVisible) {
+            this.selectedLocationId = this.visibleLocations[0] ? this.locationKey(this.visibleLocations[0]) : null;
+        }
+
+        this.updateCounts(this.visibleLocations.length);
+        this.renderList(this.visibleLocations);
+        await this.renderCanvas(this.visibleLocations);
+        this.syncFavoriteButtons();
+        this.syncActiveCard();
+        this.refreshDetailSheet();
+
+        this.logInteraction('public_service_filter_changed', 'ui_filter', null, { service_filter: nextFilter });
     }
 
     async focusLocation(event) {
@@ -718,8 +753,9 @@ export default class extends Controller {
             const matchesCategory = this.activeCategoryFilter === 'all' || this.locationCategoryKey(location) === this.activeCategoryFilter;
             const matchesJoyita = !this.joyitasOnly || this.locationIsJoyita(location);
             const matchesSource = this.activeSourceFilter === 'all' || this.locationSourceGroup(location) === this.activeSourceFilter;
+            const matchesService = this.locationMatchesService(location);
 
-            return matchesCategory && matchesJoyita && matchesSource;
+            return matchesCategory && matchesJoyita && matchesSource && matchesService;
         });
     }
 
@@ -769,7 +805,7 @@ export default class extends Controller {
         const sources = [
             ['all', 'Todas las fuentes'],
             ['mimonchis', 'Mi Monchis'],
-            ['google', 'Google'],
+            ['google', 'Places'],
         ];
 
         return sources
@@ -1011,6 +1047,17 @@ export default class extends Controller {
                 </article>
             `).join('');
         }
+    }
+
+    renderServiceFilterSummary() {
+        if (!this.hasServiceFilterLabelTarget) {
+            return;
+        }
+
+        const label = this.serviceFilterDisplayName(this.activeServiceFilter);
+        this.serviceFilterLabelTargets.forEach((target) => {
+            target.textContent = label;
+        });
     }
 
     syncFavoriteButtons() {
@@ -1869,7 +1916,7 @@ export default class extends Controller {
         }
 
         if (sourceType === 'google_places') {
-            return 'Google';
+            return 'Places';
         }
 
         return 'Mi Monchis';
@@ -2107,6 +2154,55 @@ export default class extends Controller {
         return `<div class="mobile-map-card__joyita">Joyita${tags}</div>`;
     }
 
+    serviceFilterDisplayName(filterKey) {
+        switch (filterKey) {
+            case 'dine_in':
+                return 'Comer en el lugar';
+            case 'delivery':
+                return 'Servicio a domicilio';
+            case 'takeaway':
+                return 'Para llevar';
+            case 'all':
+            default:
+                return 'Todo';
+        }
+    }
+
+    locationMatchesService(location) {
+        if (this.activeServiceFilter === 'all') {
+            return true;
+        }
+
+        const explicitDelivery = location.service_delivery === true;
+        const explicitTakeaway = location.service_takeaway === true;
+        const explicitDineIn = location.service_dine_in === true;
+        const types = Array.isArray(location.types) ? location.types.map((type) => String(type).toLowerCase()) : [];
+
+        const inferredDelivery = explicitDelivery || types.includes('meal_delivery') || Boolean(location.whatsapp_enabled);
+        const inferredTakeaway = explicitTakeaway || types.includes('meal_takeaway');
+        const inferredDineIn = explicitDineIn || types.some((type) => [
+            'restaurant',
+            'cafe',
+            'bar',
+            'bakery',
+            'coffee_shop',
+            'fast_food_restaurant',
+            'mexican_restaurant',
+            'seafood_restaurant',
+        ].includes(type));
+
+        switch (this.activeServiceFilter) {
+            case 'delivery':
+                return inferredDelivery;
+            case 'takeaway':
+                return inferredTakeaway;
+            case 'dine_in':
+                return inferredDineIn;
+            default:
+                return true;
+        }
+    }
+
     markerIcon(google, location) {
         return {
             path: google.maps.SymbolPath.CIRCLE,
@@ -2230,6 +2326,11 @@ export default class extends Controller {
         this.locationSwitcherTarget.classList.toggle('is-hidden', !this.locationSwitcherOpen);
 
         if (this.locationSwitcherOpen) {
+            if (this.locationSwitcherMode === 'services') {
+                this.locationSwitcherTarget.innerHTML = this.serviceFilterOptionsMarkup();
+                return;
+            }
+
             const savedAddressesMarkup = this.savedAddresses.length > 0
                 ? this.savedAddresses.map((address) => `
                     ${address.latitude && address.longitude ? `<button
@@ -2261,6 +2362,27 @@ export default class extends Controller {
 
             this.locationSwitcherTarget.innerHTML = savedAddressesMarkup + addAddressMarkup;
         }
+    }
+
+    serviceFilterOptionsMarkup() {
+        const options = [
+            ['all', 'Todo', 'Muestra todos los locales visibles.'],
+            ['dine_in', 'Comer en el lugar', 'Locales para sentarte o consumir en sitio.'],
+            ['delivery', 'Servicio a domicilio', 'Locales con envío o contacto para entrega.'],
+            ['takeaway', 'Para llevar', 'Locales con pedido para recoger.'],
+        ];
+
+        return options.map(([key, label, description]) => `
+            <button
+                type="button"
+                class="mobile-map-app__location-item ${this.activeServiceFilter === key ? 'is-active' : ''}"
+                data-action="click->map-shell#selectServiceFilter"
+                data-service-filter="${this.escapeHtml(key)}"
+            >
+                <strong>${this.escapeHtml(label)}</strong>
+                <span>${this.escapeHtml(description)}</span>
+            </button>
+        `).join('');
     }
 
     renderExploreMode() {

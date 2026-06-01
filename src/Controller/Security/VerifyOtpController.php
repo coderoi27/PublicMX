@@ -57,9 +57,7 @@ final class VerifyOtpController extends AbstractController
 
         $user = $entityManager->getRepository(PublicUser::class)->findOneBy(['email' => $email]);
         if ($user instanceof PublicUser) {
-            $user
-                ->setStatus('active')
-                ->setEmailVerifiedAt(new \DateTimeImmutable());
+            $user->activate();
         }
 
         $otp->consume();

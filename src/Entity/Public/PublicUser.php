@@ -13,6 +13,11 @@ use Symfony\Component\Security\Core\User\UserInterface;
 #[ORM\HasLifecycleCallbacks]
 class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
 {
+    public const STATUS_PENDING_VERIFICATION = 'pending_verification';
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_BLOCKED = 'blocked';
+    public const STATUS_DELETED = 'deleted';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -31,7 +36,7 @@ class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
     private string $passwordHash;
 
     #[ORM\Column(length: 32)]
-    private string $status = 'pending_verification';
+    private string $status = self::STATUS_PENDING_VERIFICATION;
 
     #[ORM\Column(length: 32)]
     private string $registrationOrigin = 'organic';
@@ -123,7 +128,23 @@ class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function setStatus(string $status): self
     {
+        if (!in_array($status, self::statuses(), true)) {
+            throw new \InvalidArgumentException(sprintf('Unsupported public user status "%s".', $status));
+        }
+
+        if (!$this->canTransitionTo($status)) {
+            throw new \InvalidArgumentException(sprintf('Invalid public user status transition "%s" -> "%s".', $this->status, $status));
+        }
+
         $this->status = $status;
+
+        return $this;
+    }
+
+    public function activate(?\DateTimeImmutable $verifiedAt = null): self
+    {
+        $this->setStatus(self::STATUS_ACTIVE);
+        $this->emailVerifiedAt = $verifiedAt ?? new \DateTimeImmutable();
 
         return $this;
     }
@@ -155,5 +176,40 @@ class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
     public function getRegistrationOrigin(): string
     {
         return $this->registrationOrigin;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function statuses(): array
+    {
+        return [
+            self::STATUS_PENDING_VERIFICATION,
+            self::STATUS_ACTIVE,
+            self::STATUS_BLOCKED,
+            self::STATUS_DELETED,
+        ];
+    }
+
+    public function canTransitionTo(string $status): bool
+    {
+        if ($status === $this->status) {
+            return true;
+        }
+
+        return in_array($status, self::statusTransitions()[$this->status] ?? [], true);
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    public static function statusTransitions(): array
+    {
+        return [
+            self::STATUS_PENDING_VERIFICATION => [self::STATUS_ACTIVE, self::STATUS_DELETED],
+            self::STATUS_ACTIVE => [self::STATUS_BLOCKED, self::STATUS_DELETED],
+            self::STATUS_BLOCKED => [self::STATUS_ACTIVE, self::STATUS_DELETED],
+            self::STATUS_DELETED => [],
+        ];
     }
 }

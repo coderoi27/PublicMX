@@ -33,6 +33,7 @@ final class GooglePlacesProxyController extends AbstractController
 
         $lat = (float) $lat;
         $lng = (float) $lng;
+        $category = $this->normalizeCategoryFilter((string) $request->query->get('category', 'all'));
 
         // Obtain core feed (can be optimized with cache in the future)
         $feed = $coreFeedClient->fetchLocations($lat, $lng);
@@ -46,20 +47,22 @@ final class GooglePlacesProxyController extends AbstractController
         $categoryCatalog = $feed['meta']['category_catalog'] ?? [];
         $placeCategoryRules = $feed['meta']['place_category_rules'] ?? [];
         $blacklist = $feed['meta']['google_places_blacklist'] ?? [];
+        $blacklistNameKeywords = $feed['meta']['google_places_blacklist_name_keywords'] ?? [];
 
         // Cache the Google Places result based on coordinates (rounded to ~1km grid)
-        $cacheKey = sprintf('google_places_%s_%s', round($lat, 3), round($lng, 3));
+        $cacheKey = sprintf('google_places_v4_%s_%s_%s', round($lat, 3), round($lng, 3), $category);
         
-        $places = $cache->get($cacheKey, function (ItemInterface $item) use ($placesClient, $lat, $lng) {
-            $item->expiresAfter(3600); // Cache for 1 hour
-            return $placesClient->searchNearby($lat, $lng);
+        $places = $cache->get($cacheKey, function (ItemInterface $item) use ($placesClient, $lat, $lng, $category) {
+            $places = $this->discoverPlaces($placesClient, $lat, $lng, $category);
+            $item->expiresAfter($places === [] ? 60 : 300);
+
+            return $places;
         });
 
         // Translate types to Canonical
         $mappedPlaces = [];
         foreach ($places as $place) {
-            $placeId = $place['id'] ?? null;
-            if ($placeId !== null && in_array($placeId, $blacklist, true)) {
+            if ($this->isBlacklistedPlace($place, $blacklist, $blacklistNameKeywords)) {
                 continue;
             }
 
@@ -105,6 +108,12 @@ final class GooglePlacesProxyController extends AbstractController
             $photoUrl = sprintf('https://places.googleapis.com/v1/%s/media?maxHeightPx=400&maxWidthPx=400&key=%s', $photoName, $apiKey);
         }
 
+        $currentOpeningHours = is_array($place['currentOpeningHours'] ?? null) ? $place['currentOpeningHours'] : [];
+        $regularOpeningHours = is_array($place['regularOpeningHours'] ?? null) ? $place['regularOpeningHours'] : [];
+        $openingHours = $currentOpeningHours !== [] ? $currentOpeningHours : $regularOpeningHours;
+        $openNow = $currentOpeningHours['openNow'] ?? ($regularOpeningHours['openNow'] ?? null);
+        $openingHoursText = $openingHours['weekdayDescriptions'] ?? [];
+
         return [
             'location_id' => 'google_' . ($place['id'] ?? md5(json_encode($place))),
             'merchant_name' => $place['displayName']['text'] ?? 'Local sin nombre',
@@ -116,6 +125,9 @@ final class GooglePlacesProxyController extends AbstractController
             'photo_url' => $photoUrl,
             'rating' => $place['rating'] ?? null,
             'user_rating_count' => $place['userRatingCount'] ?? null,
+            'open_now' => is_bool($openNow) ? $openNow : null,
+            'opening_hours_text' => is_array($openingHoursText) ? array_values(array_filter($openingHoursText, 'is_string')) : [],
+            'business_status' => is_string($place['businessStatus'] ?? null) ? $place['businessStatus'] : null,
             'whatsapp_enabled' => false,
             'whatsapp_e164' => null,
             'is_claimable' => true,
@@ -154,11 +166,11 @@ final class GooglePlacesProxyController extends AbstractController
             }
         }
 
-        $placeName = $this->normalizeText((string) ($place['displayName']['text'] ?? ''));
+        $placeName = $this->normalizeText($this->localizedTextValue($place['displayName'] ?? ''));
         $typeLabels = $this->normalizeText(sprintf(
             '%s %s',
-            (string) ($place['primaryTypeDisplayName']['text'] ?? ''),
-            (string) ($place['googleMapsTypeLabel'] ?? '')
+            $this->localizedTextValue($place['primaryTypeDisplayName'] ?? ''),
+            $this->localizedTextValue($place['googleMapsTypeLabel'] ?? '')
         ));
         foreach ($this->rulesByType($placeCategoryRules, 'name_keyword') as $rule) {
             $category = $this->categoryForRule($rule, $categoriesById);
@@ -185,6 +197,11 @@ final class GooglePlacesProxyController extends AbstractController
             }
         }
 
+        $heuristicCategory = $this->matchCategoryByLocalHeuristic($place, $categoryCatalog, $primaryType, $types);
+        if ($heuristicCategory !== null) {
+            return [$heuristicCategory, 'local_keyword_heuristic'];
+        }
+
         foreach ($categoryCatalog as $category) {
             if (($category['slug'] ?? null) === 'antojos') {
                 return [$category, 'fallback_antojos'];
@@ -196,6 +213,123 @@ final class GooglePlacesProxyController extends AbstractController
         }
 
         return [null, 'unclassified'];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function discoverPlaces(GooglePlacesClient $placesClient, float $lat, float $lng, string $category): array
+    {
+        $places = $placesClient->searchNearby($lat, $lng, 1800);
+
+        foreach ($this->textQueriesForCategory($category) as $query) {
+            $places = array_merge($places, $placesClient->searchTextNearby($query, $lat, $lng, 1800, 10));
+        }
+
+        return $this->deduplicatePlaces($places);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function textQueriesForCategory(string $category): array
+    {
+        return match ($category) {
+            'tacos' => ['taquería', 'tacos'],
+            'antojitos', 'antojos' => ['antojitos mexicanos', 'tacos'],
+            'cafe', 'cafes', 'coffee' => ['cafetería'],
+            'postres' => ['postres', 'heladería'],
+            'mariscos' => ['mariscos'],
+            'hamburguesas' => ['hamburguesas'],
+            'pizza', 'pizzas' => ['pizza'],
+            'all', 'todos' => ['taquería', 'tacos'],
+            default => [],
+        };
+    }
+
+    /**
+     * @param list<array<string, mixed>> $places
+     * @return list<array<string, mixed>>
+     */
+    private function deduplicatePlaces(array $places): array
+    {
+        $deduplicated = [];
+        foreach ($places as $place) {
+            $placeId = is_string($place['id'] ?? null) ? $place['id'] : md5(json_encode($place));
+            $deduplicated[$placeId] = $place;
+        }
+
+        return array_values($deduplicated);
+    }
+
+    private function matchCategoryByLocalHeuristic(array $place, array $categoryCatalog, string $primaryType, array $types): ?array
+    {
+        $haystack = $this->normalizeText(sprintf(
+            '%s %s %s %s',
+            $this->localizedTextValue($place['displayName'] ?? ''),
+            $this->localizedTextValue($place['primaryTypeDisplayName'] ?? ''),
+            $this->localizedTextValue($place['googleMapsTypeLabel'] ?? ''),
+            implode(' ', $types)
+        ));
+
+        $typeSet = array_fill_keys(array_merge([$primaryType], $types), true);
+        $candidates = [
+            [['taco', 'taquer', 'mexican_restaurant'], ['taco', 'taqu', 'antoj']],
+            [['pizza'], ['pizza']],
+            [['hamburg', 'hamburger_restaurant'], ['hamburg']],
+            [['cafe', 'cafeter', 'coffee_shop'], ['cafe', 'cafeter', 'coffee']],
+            [['panader', 'bakery'], ['pan', 'bakery']],
+            [['postre', 'helad', 'ice_cream_shop'], ['postre', 'helad']],
+            [['marisco', 'seafood_restaurant'], ['marisco', 'seafood']],
+            [['bar'], ['bar']],
+            [['sushi', 'sushi_restaurant'], ['sushi']],
+        ];
+
+        foreach ($candidates as [$matchKeywords, $categoryKeywords]) {
+            $matchesText = false;
+            foreach ($matchKeywords as $keyword) {
+                if (isset($typeSet[$keyword]) || str_contains($haystack, $keyword)) {
+                    $matchesText = true;
+                    break;
+                }
+            }
+
+            if ($matchesText) {
+                $category = $this->findCategoryByKeywords($categoryCatalog, $categoryKeywords);
+                if ($category !== null) {
+                    return $category;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function findCategoryByKeywords(array $categoryCatalog, array $keywords): ?array
+    {
+        foreach ($categoryCatalog as $category) {
+            $categoryText = $this->normalizeText(sprintf(
+                '%s %s %s',
+                (string) ($category['slug'] ?? ''),
+                (string) ($category['name'] ?? ''),
+                (string) ($category['icon_key'] ?? '')
+            ));
+
+            foreach ($keywords as $keyword) {
+                if ($keyword !== '' && str_contains($categoryText, $keyword)) {
+                    return $category;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeCategoryFilter(string $category): string
+    {
+        $category = $this->normalizeText($category);
+
+        return $category === '' || $category === 'todos' ? 'all' : $category;
     }
 
     private function rulesByType(array $rules, string $ruleType): array
@@ -219,6 +353,51 @@ final class GooglePlacesProxyController extends AbstractController
     private function ruleMatchValue(array $rule): string
     {
         return (string) ($rule['match_value'] ?? '');
+    }
+
+    private function isBlacklistedPlace(array $place, array $blacklistedPlaceIds, array $blacklistedNameKeywords): bool
+    {
+        $placeId = $place['id'] ?? null;
+        if (is_string($placeId) && in_array(mb_strtolower($placeId), $this->normalizeStringList($blacklistedPlaceIds), true)) {
+            return true;
+        }
+
+        $placeName = $this->normalizeText($this->localizedTextValue($place['displayName'] ?? ''));
+        if ($placeName === '') {
+            return false;
+        }
+
+        foreach ($this->normalizeStringList($blacklistedNameKeywords) as $keyword) {
+            $keyword = $this->normalizeText($keyword);
+            if ($keyword !== '' && str_contains($placeName, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function localizedTextValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            $value = $value['text'] ?? '';
+        }
+
+        return is_scalar($value) ? (string) $value : '';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeStringList(array $values): array
+    {
+        return array_values(array_filter(
+            array_map(
+                static fn (mixed $value): ?string => is_string($value) ? mb_strtolower(trim($value)) : null,
+                $values
+            ),
+            static fn (?string $value): bool => $value !== null && $value !== ''
+        ));
     }
 
     private function normalizeText(string $value): string

@@ -4,7 +4,6 @@ export default class extends Controller {
     static targets = [
         'canvas',
         'status',
-        'statusDuplicate',
         'count',
         'countDuplicate',
         'list',
@@ -571,6 +570,8 @@ export default class extends Controller {
 
     async loadFeed() {
         this.setStatus('Cargando feed canónico...');
+        this.renderListSkeleton();
+        this.setCanvasNote('Cargando mapa y locales...');
 
         const url = new URL(this.feedUrlValue, window.location.origin);
         if (this.hasUserCoordinates()) {
@@ -729,6 +730,33 @@ export default class extends Controller {
             this.exploreListGridTarget.innerHTML = locations.length === 0
                 ? '<article class="mobile-map-app__empty-state mobile-map-app__empty-state--list"><strong>No encontré locales en esta zona</strong><p>Ajusta la ubicación, mueve el mapa o cambia de categoría.</p></article>'
                 : markup;
+        }
+    }
+
+    renderListSkeleton(count = 4) {
+        const markup = Array.from({ length: count }, () => `
+            <article class="mobile-map-card mobile-map-card--placeholder" aria-hidden="true">
+                <div class="mobile-map-card__media mobile-map-card__media--placeholder placeholder-glow">
+                    <span class="placeholder mobile-map-card__placeholder-photo"></span>
+                </div>
+                <div class="mobile-map-card__body placeholder-glow">
+                    <span class="placeholder mobile-map-card__placeholder-line mobile-map-card__placeholder-line--title"></span>
+                    <span class="placeholder mobile-map-card__placeholder-line"></span>
+                    <span class="placeholder mobile-map-card__placeholder-line mobile-map-card__placeholder-line--short"></span>
+                    <div class="mobile-map-card__placeholder-meta">
+                        <span class="placeholder mobile-map-card__placeholder-pill"></span>
+                        <span class="placeholder mobile-map-card__placeholder-pill mobile-map-card__placeholder-pill--short"></span>
+                    </div>
+                </div>
+            </article>
+        `).join('');
+
+        if (this.hasListTarget) {
+            this.listTarget.innerHTML = markup;
+        }
+
+        if (this.hasExploreListGridTarget) {
+            this.exploreListGridTarget.innerHTML = markup;
         }
     }
 
@@ -935,9 +963,8 @@ export default class extends Controller {
     }
 
     setStatus(message) {
-        this.statusTarget.textContent = message;
-        if (this.hasStatusDuplicateTarget) {
-            this.statusDuplicateTarget.textContent = message;
+        if (this.hasStatusTarget) {
+            this.statusTarget.textContent = message;
         }
     }
 
@@ -1863,6 +1890,14 @@ export default class extends Controller {
 
     publicationStatusLabel(location) {
         if (location.source_type === 'google_places') {
+            if (this.locationBusinessStatus(location) === 'CLOSED_PERMANENTLY') {
+                return 'Cerrado';
+            }
+
+            if (this.locationBusinessStatus(location) === 'CLOSED_TEMPORARILY') {
+                return 'Cerrado temporal';
+            }
+
             if (this.locationIsOpen(location) === true) {
                 return 'Abierto';
             }
@@ -1871,7 +1906,7 @@ export default class extends Controller {
                 return 'Cerrado';
             }
 
-            return 'Disponible';
+            return 'Sin horario';
         }
 
         if (location.publication_state === 'public_visible') {
@@ -1887,7 +1922,11 @@ export default class extends Controller {
 
     publicationStatusClass(location) {
         if (location.source_type === 'google_places') {
-            if (this.locationIsOpen(location) === false) {
+            if (
+                this.locationIsOpen(location) === false
+                || this.locationBusinessStatus(location) === 'CLOSED_PERMANENTLY'
+                || this.locationBusinessStatus(location) === 'CLOSED_TEMPORARILY'
+            ) {
                 return 'mobile-map-card__status--closed';
             }
 
@@ -2707,7 +2746,15 @@ export default class extends Controller {
 
     setCanvasNote(message) {
         if (this.hasCanvasNoteTarget) {
-            this.canvasNoteTarget.textContent = message;
+            if (!message) {
+                this.canvasNoteTarget.innerHTML = '';
+                return;
+            }
+
+            this.canvasNoteTarget.innerHTML = `
+                <span class="map-shell__canvas-loader" aria-hidden="true"></span>
+                <span>${this.escapeHtml(message)}</span>
+            `;
         }
     }
 
@@ -2903,6 +2950,10 @@ export default class extends Controller {
         }
 
         return null;
+    }
+
+    locationBusinessStatus(location) {
+        return typeof location.business_status === 'string' ? location.business_status : '';
     }
 
     openingHoursSummary(location) {

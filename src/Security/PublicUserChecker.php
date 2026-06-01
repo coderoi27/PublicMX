@@ -21,7 +21,7 @@ final class PublicUserChecker implements UserCheckerInterface
             return;
         }
 
-        if ($user->getStatus() !== 'active') {
+        if ($user->getStatus() !== PublicUser::STATUS_ACTIVE) {
             throw new CustomUserMessageAccountStatusException('Debes verificar tu correo antes de iniciar sesión.');
         }
     }

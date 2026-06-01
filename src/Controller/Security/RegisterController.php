@@ -68,7 +68,7 @@ final class RegisterController extends AbstractController
             ->setLastName($lastName)
             ->setEmail($email)
             ->setRegistrationOrigin($registrationOrigin)
-            ->setStatus('pending_verification');
+            ->setStatus(PublicUser::STATUS_PENDING_VERIFICATION);
 
         $user->setPasswordHash($passwordHasher->hashPassword($user, $password));
 

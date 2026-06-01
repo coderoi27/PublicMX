@@ -160,24 +160,17 @@
             </header>
 
             <section class="mobile-map-app__explore-shell" data-map-shell-target="exploreSection">
-                <section class="mobile-map-app__explore-toolbar">
-                    <!-- Segmented control eliminado por solicitud del usuario, la alternancia ahora la hace el botón del tabbar -->
-                    <p class="mobile-map-app__explore-caption">
-                        <strong>Explorar</strong>
-                        <span data-map-shell-target="status">Cargando feed canonico...</span>
-                    </p>
-                </section>
-
                 <div class="mobile-map-app__map-stage" data-map-shell-target="mapStage">
                     <div class="map-shell__canvas" data-map-shell-target="canvas"></div>
 
                     <div class="mobile-map-app__status-pill">
-                        <span data-map-shell-target="statusDuplicate">Cargando feed canonico...</span>
+                        <span data-map-shell-target="status">Cargando feed canonico...</span>
                         <strong data-map-shell-target="count">{{ locations|length }}</strong>
                     </div>
 
                     <div class="map-shell__canvas-note" data-map-shell-target="canvasNote">
-                        Intentando cargar Google Maps...
+                        <span class="map-shell__canvas-loader" aria-hidden="true"></span>
+                        <span>Cargando mapa y locales...</span>
                     </div>
 
                     <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRowContainer">

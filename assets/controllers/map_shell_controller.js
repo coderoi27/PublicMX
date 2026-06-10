@@ -90,6 +90,11 @@ export default class extends Controller {
         };
         this.categoryCatalog = [];
         this.categoryCatalogBySlug = new Map();
+        this.mapSettings = {
+            defaultZoom: 18,
+            focusedZoom: 18,
+            streetLabelWeight: 'normal',
+        };
         this.selectedLocationId = null;
         this.activeCategoryFilter = 'all';
         this.joyitasOnly = false;
@@ -115,6 +120,7 @@ export default class extends Controller {
         this.lastDiscoveryCenter = null;
         this.isDiscoveringPlaces = false;
         this.isSyncingMapViewport = false;
+        this.pendingViewportCenter = this.hasUserCoordinates() ? this.currentUserPosition() : null;
         this.currentLocationLabel = this.hasHeroLocationTarget ? this.heroLocationTarget.textContent.trim() : '';
         this.restoreExploreMode();
         this.restorePersistedLocationContext();
@@ -588,6 +594,7 @@ export default class extends Controller {
 
             const payload = await response.json();
             this.registerCategoryCatalog(payload.meta?.category_catalog ?? []);
+            this.registerMapSettings(payload.meta?.settings?.map ?? {});
             this.googlePlacesProxyEnabled = payload.meta?.plugins?.google_places_proxy === true;
             const canonicalLocations = Array.isArray(payload.data) ? payload.data : [];
             let locations = canonicalLocations;
@@ -792,7 +799,7 @@ export default class extends Controller {
             return;
         }
 
-        const categoryKeys = this.availableCategoryKeys(locations);
+        const categoryKeys = this.availableCategoryKeys(this.categoryChipContextLocations(locations));
         if (!categoryKeys.includes(this.activeCategoryFilter) && this.activeCategoryFilter !== 'all') {
             this.activeCategoryFilter = 'all';
         }
@@ -871,6 +878,16 @@ export default class extends Controller {
         `;
     }
 
+    categoryChipContextLocations(locations) {
+        return locations.filter((location) => {
+            const matchesJoyita = !this.joyitasOnly || this.locationIsJoyita(location);
+            const matchesSource = this.activeSourceFilter === 'all' || this.locationSourceGroup(location) === this.activeSourceFilter;
+            const matchesService = this.locationMatchesService(location);
+
+            return matchesJoyita && matchesSource && matchesService;
+        });
+    }
+
     availableCategoryKeys(locations) {
         const discoveredCategories = new Set();
 
@@ -881,12 +898,12 @@ export default class extends Controller {
             }
         });
 
-        const orderedDiscovered = this.categoryCatalog
+        const catalogOrderedDiscovered = this.categoryCatalog
             .map((category) => String(category.slug))
-            .filter((slug) => discoveredCategories.has(slug));
-        const remainingFallback = [...discoveredCategories].filter((slug) => !orderedDiscovered.includes(slug));
+            .filter((slug) => slug !== '' && discoveredCategories.has(slug));
+        const remainingFallback = [...discoveredCategories].filter((slug) => !catalogOrderedDiscovered.includes(slug));
 
-        return ['all', ...orderedDiscovered, ...remainingFallback];
+        return ['all', ...catalogOrderedDiscovered, ...remainingFallback];
     }
 
     shouldFetchGooglePlaces() {
@@ -1116,7 +1133,8 @@ export default class extends Controller {
                     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
                     { featureType: 'transit.station', stylers: [{ saturation: -40 }] },
                     { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#b3c3d4' }] },
-                    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#425466' }] },
+                    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: this.streetLabelColor() }, { weight: this.streetLabelWeight() }] },
+                    { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#f8f3e8' }, { weight: 1 }] },
                     { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d9eef9' }] },
                     { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f8f3e8' }] },
                 ],
@@ -1154,7 +1172,7 @@ export default class extends Controller {
                     },
                 });
                 this.map.setCenter(userPosition);
-                this.map.setZoom(14);
+                this.map.setZoom(this.defaultMapZoom());
                 this.rememberCurrentMapCenter();
                 this.isSyncingMapViewport = false;
                 this.setCanvasNote(locations.length === 0
@@ -1164,7 +1182,7 @@ export default class extends Controller {
             }
 
             this.map.setCenter({ lat: 19.432608, lng: -99.133209 });
-            this.map.setZoom(11);
+            this.map.setZoom(13);
             this.rememberCurrentMapCenter();
             this.isSyncingMapViewport = false;
             this.setCanvasNote(locations.length === 0
@@ -1216,14 +1234,19 @@ export default class extends Controller {
 
         if (options.preserveViewport) {
             // Keep the user's current viewport while augmenting nearby discoveries.
+        } else if (this.pendingViewportCenter && Number.isFinite(this.pendingViewportCenter.lat) && Number.isFinite(this.pendingViewportCenter.lng)) {
+            this.map.setCenter(this.pendingViewportCenter);
+            this.map.setZoom(this.defaultMapZoom());
+            this.pendingViewportCenter = null;
         } else if (hasUserCoordinates && validLocations.length > 0) {
-            this.map.fitBounds(bounds, 60);
+            this.map.setCenter(this.currentUserPosition());
+            this.map.setZoom(this.defaultMapZoom());
         } else if (hasUserCoordinates) {
             this.map.setCenter(this.currentUserPosition());
-            this.map.setZoom(15);
+            this.map.setZoom(this.defaultMapZoom());
         } else if (validLocations.length === 1) {
             this.map.setCenter(bounds.getCenter());
-            this.map.setZoom(15);
+            this.map.setZoom(this.defaultMapZoom());
         } else {
             this.map.fitBounds(bounds, 60);
         }
@@ -1251,7 +1274,7 @@ export default class extends Controller {
 
         this.isSyncingMapViewport = true;
         this.map.panTo(marker.getPosition());
-        this.map.setZoom(16);
+        this.map.setZoom(this.focusedMapZoom());
         this.openInfoWindow(location, marker);
         window.setTimeout(() => {
             this.rememberCurrentMapCenter();
@@ -1746,6 +1769,7 @@ export default class extends Controller {
 
         this.latValue = Number(latitude);
         this.lngValue = Number(longitude);
+        this.pendingViewportCenter = this.hasUserCoordinates() ? this.currentUserPosition() : null;
         this.persistLocationContext();
     }
 
@@ -2046,6 +2070,38 @@ export default class extends Controller {
         this.categoryCatalogBySlug = new Map(this.categoryCatalog.map((category) => [String(category.slug), category]));
     }
 
+    registerMapSettings(settings) {
+        const defaultZoom = Number(settings?.default_zoom ?? this.mapSettings.defaultZoom);
+        const focusedZoom = Number(settings?.focused_zoom ?? this.mapSettings.focusedZoom);
+        const streetLabelWeight = String(settings?.street_label_weight ?? this.mapSettings.streetLabelWeight);
+
+        this.mapSettings = {
+            defaultZoom: this.clampNumber(defaultZoom, 10, 20, 18),
+            focusedZoom: this.clampNumber(focusedZoom, 10, 20, 18),
+            streetLabelWeight: streetLabelWeight === 'light' ? 'light' : 'normal',
+        };
+    }
+
+    defaultMapZoom() {
+        return this.mapSettings.defaultZoom;
+    }
+
+    focusedMapZoom() {
+        return this.mapSettings.focusedZoom;
+    }
+
+    streetLabelColor() {
+        return this.mapSettings.streetLabelWeight === 'light' ? '#64748b' : '#475569';
+    }
+
+    streetLabelWeight() {
+        return this.mapSettings.streetLabelWeight === 'light' ? 0.55 : 0.8;
+    }
+
+    clampNumber(value, min, max, fallback) {
+        return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+    }
+
     categoryDisplayName(categoryKey) {
         if (categoryKey === 'all') {
             return 'Todos';
@@ -2178,7 +2234,9 @@ export default class extends Controller {
     }
 
     locationSourceGroup(location) {
-        return location.source_type === 'google_places' ? 'google' : 'mimonchis';
+        const sourceType = String(location.source_type ?? '').toLowerCase();
+
+        return ['google_places', 'google', 'places'].includes(sourceType) ? 'google' : 'mimonchis';
     }
 
     joyitaBadgeMarkup(location) {
@@ -2679,15 +2737,21 @@ export default class extends Controller {
             return;
         }
 
-        this.cookieConsentStatusTarget.textContent = consent.scope === 'all'
-            ? 'Aceptaste cookies esenciales y analítica.'
-            : 'Solo cookies esenciales activas.';
+        const analytics = consent.scope === 'all' || consent.categories?.analytics === true;
+        this.cookieConsentStatusTarget.textContent = analytics
+            ? 'Preferencias activas: esenciales y analítica.'
+            : 'Preferencias activas: solo esenciales.';
     }
 
     storeCookieConsent(scope) {
         try {
+            const analytics = scope === 'all';
             window.localStorage.setItem('mi_monchis_cookie_consent', JSON.stringify({
-                scope,
+                scope: analytics ? 'all' : 'custom',
+                categories: {
+                    essential: true,
+                    analytics,
+                },
                 version: 'v1.0',
                 decided_at: new Date().toISOString(),
             }));
@@ -3156,6 +3220,8 @@ export default class extends Controller {
     }
 
     analyticsConsentGranted() {
-        return this.readCookieConsent()?.scope === 'all';
+        const consent = this.readCookieConsent();
+
+        return consent?.scope === 'all' || consent?.categories?.analytics === true;
     }
 }

@@ -24,19 +24,38 @@
         <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
         {% endif %}
 
-        {% if app.environment != 'dev' or app.request.server.get('GOOGLE_ANALYTICS_ID') %}
-            {% set ga_id = app.request.server.get('GOOGLE_ANALYTICS_ID') %}
-            {% if ga_id %}
-                <!-- Google tag (gtag.js) -->
-                <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
-                <script>
-                  window.dataLayer = window.dataLayer || [];
-                  function gtag(){dataLayer.push(arguments);}
-                  gtag('js', new Date());
+        {% set ga_id = app.request.server.get('GOOGLE_ANALYTICS_ID') %}
+        {% if ga_id %}
+            <script>
+                window.__miMonchisGoogleAnalyticsId = '{{ ga_id|e('js') }}';
+                window.__miMonchisLoadGoogleAnalytics = function () {
+                    if (!window.__miMonchisGoogleAnalyticsId || window.__miMonchisGoogleAnalyticsLoaded) {
+                        return;
+                    }
 
-                  gtag('config', '{{ ga_id }}');
-                </script>
-            {% endif %}
+                    window.__miMonchisGoogleAnalyticsLoaded = true;
+                    window.dataLayer = window.dataLayer || [];
+                    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+                    window.gtag('js', new Date());
+                    window.gtag('config', window.__miMonchisGoogleAnalyticsId);
+
+                    const script = document.createElement('script');
+                    script.async = true;
+                    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(window.__miMonchisGoogleAnalyticsId);
+                    document.head.appendChild(script);
+                };
+
+                try {
+                    const consent = JSON.parse(window.localStorage.getItem('mi_monchis_cookie_consent') || 'null');
+                    if (consent && (consent.scope === 'all' || consent.categories?.analytics === true)) {
+                        window.__miMonchisLoadGoogleAnalytics();
+                    }
+                } catch (error) {
+                    // La analítica opcional no debe bloquear la carga de la webapp.
+                }
+
+                window.addEventListener('mi-monchis:analytics-consent-granted', window.__miMonchisLoadGoogleAnalytics);
+            </script>
         {% endif %}
     </head>
     <body>
@@ -45,11 +64,22 @@
             <div class="cookie-consent__panel">
                 <div>
                     <strong>Tu privacidad en Mi Monchis</strong>
-                    <p>Usamos tecnologías esenciales para operar la webapp y opcionales para analítica. Puedes aceptar todas o rechazar las no esenciales.</p>
+                    <p>Usamos tecnologías esenciales para operar la webapp y opcionales para analítica. Puedes guardar tu preferencia o rechazar las no esenciales.</p>
+                    <div class="cookie-consent__options">
+                        <label>
+                            <input type="checkbox" checked disabled>
+                            <span>Esenciales</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" data-cookie-consent-target="analyticsInput">
+                            <span>Analítica</span>
+                        </label>
+                    </div>
                     <a href="{{ path('public_legal_show', { slug: 'cookies' }) }}">Ver política de cookies</a>
                 </div>
                 <div class="cookie-consent__actions">
                     <button type="button" data-action="cookie-consent#rejectOptional">Rechazar no esenciales</button>
+                    <button type="button" data-action="cookie-consent#savePreferences">Guardar preferencias</button>
                     <button type="button" data-action="cookie-consent#acceptAll">Aceptar todas</button>
                 </div>
             </div>

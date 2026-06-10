@@ -10,8 +10,8 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
+use Symfony\Contracts\Cache\TagAwareCacheInterface;
 
 final class GooglePlacesProxyController extends AbstractController
 {
@@ -20,7 +20,7 @@ final class GooglePlacesProxyController extends AbstractController
         Request $request,
         CoreFeedClient $coreFeedClient,
         GooglePlacesClient $placesClient,
-        CacheInterface $cache,
+        TagAwareCacheInterface $cache,
         #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.google_maps_api_key%')]
         string $googleMapsApiKey
     ): JsonResponse {
@@ -48,13 +48,31 @@ final class GooglePlacesProxyController extends AbstractController
         $placeCategoryRules = $feed['meta']['place_category_rules'] ?? [];
         $blacklist = $feed['meta']['google_places_blacklist'] ?? [];
         $blacklistNameKeywords = $feed['meta']['google_places_blacklist_name_keywords'] ?? [];
+        $claimedGooglePlaceIds = $this->claimedGooglePlaceIds($feed['meta']['claimed_google_place_ids'] ?? []);
+        $settings = $this->placesSettings($feed['meta']['settings']['google_places_proxy'] ?? []);
+        $radiusMeters = $settings['nearby_radius_meters'];
 
         // Cache the Google Places result based on coordinates (rounded to ~1km grid)
-        $cacheKey = sprintf('google_places_v4_%s_%s_%s', round($lat, 3), round($lng, 3), $category);
-        
-        $places = $cache->get($cacheKey, function (ItemInterface $item) use ($placesClient, $lat, $lng, $category) {
-            $places = $this->discoverPlaces($placesClient, $lat, $lng, $category);
-            $item->expiresAfter($places === [] ? 60 : 300);
+        $cacheKey = sprintf(
+            'google_places_v9_%s_%s_%s_%d_%d_%d_%s_%d_%d%d%d%d',
+            round($lat, 3),
+            round($lng, 3),
+            $category,
+            $radiusMeters,
+            $settings['nearby_max_results'],
+            $settings['text_search_page_size'],
+            $settings['text_search_mode'],
+            $settings['max_total_places'],
+            $settings['include_photos'] ? 1 : 0,
+            $settings['include_ratings'] ? 1 : 0,
+            $settings['include_opening_hours'] ? 1 : 0,
+            $settings['include_service_attributes'] ? 1 : 0,
+        );
+
+        $places = $cache->get($cacheKey, function (ItemInterface $item) use ($placesClient, $lat, $lng, $category, $settings) {
+            $item->tag(['google_places_proxy']);
+            $places = $this->discoverPlaces($placesClient, $lat, $lng, $category, $settings);
+            $item->expiresAfter($places === [] ? $settings['empty_cache_ttl_seconds'] : $settings['cache_ttl_seconds']);
 
             return $places;
         });
@@ -62,6 +80,10 @@ final class GooglePlacesProxyController extends AbstractController
         // Translate types to Canonical
         $mappedPlaces = [];
         foreach ($places as $place) {
+            if ($this->isClaimedGooglePlace($place, $claimedGooglePlaceIds)) {
+                continue;
+            }
+
             if ($this->isBlacklistedPlace($place, $blacklist, $blacklistNameKeywords)) {
                 continue;
             }
@@ -71,6 +93,13 @@ final class GooglePlacesProxyController extends AbstractController
                 $mappedPlaces[] = $mapped;
             }
         }
+
+        $mappedPlaces = array_values(array_filter(
+            $mappedPlaces,
+            static fn (array $place): bool => ($place['distance_meters'] ?? ($radiusMeters + 1)) <= $radiusMeters,
+        ));
+        usort($mappedPlaces, static fn (array $a, array $b): int => ($a['distance_meters'] ?? 0) <=> ($b['distance_meters'] ?? 0));
+        $mappedPlaces = array_slice($mappedPlaces, 0, $settings['max_total_places']);
 
         return $this->json(['data' => $mappedPlaces]);
     }
@@ -125,6 +154,10 @@ final class GooglePlacesProxyController extends AbstractController
             'photo_url' => $photoUrl,
             'rating' => $place['rating'] ?? null,
             'user_rating_count' => $place['userRatingCount'] ?? null,
+            'types' => $types,
+            'service_delivery' => is_bool($place['delivery'] ?? null) ? $place['delivery'] : null,
+            'service_takeaway' => is_bool($place['takeout'] ?? null) ? $place['takeout'] : null,
+            'service_dine_in' => is_bool($place['dineIn'] ?? null) ? $place['dineIn'] : null,
             'open_now' => is_bool($openNow) ? $openNow : null,
             'opening_hours_text' => is_array($openingHoursText) ? array_values(array_filter($openingHoursText, 'is_string')) : [],
             'business_status' => is_string($place['businessStatus'] ?? null) ? $place['businessStatus'] : null,
@@ -202,47 +235,102 @@ final class GooglePlacesProxyController extends AbstractController
             return [$heuristicCategory, 'local_keyword_heuristic'];
         }
 
-        foreach ($categoryCatalog as $category) {
-            if (($category['slug'] ?? null) === 'antojos') {
-                return [$category, 'fallback_antojos'];
-            }
-        }
-
-        if (count($categoryCatalog) > 0) {
-            return [$categoryCatalog[0], 'fallback_first_category'];
-        }
-
         return [null, 'unclassified'];
     }
 
     /**
+     * @param array{nearby_radius_meters:int, nearby_max_results:int, text_search_page_size:int, text_search_mode:string, max_total_places:int, cache_ttl_seconds:int, empty_cache_ttl_seconds:int, include_photos:bool, include_ratings:bool, include_opening_hours:bool, include_service_attributes:bool} $settings
+     *
      * @return list<array<string, mixed>>
      */
-    private function discoverPlaces(GooglePlacesClient $placesClient, float $lat, float $lng, string $category): array
+    private function discoverPlaces(GooglePlacesClient $placesClient, float $lat, float $lng, string $category, array $settings): array
     {
-        $places = $placesClient->searchNearby($lat, $lng, 1800);
+        $fieldOptions = $this->fieldOptions($settings);
+        $places = $placesClient->searchNearby($lat, $lng, $settings['nearby_radius_meters'], $settings['nearby_max_results'], $fieldOptions);
 
-        foreach ($this->textQueriesForCategory($category) as $query) {
-            $places = array_merge($places, $placesClient->searchTextNearby($query, $lat, $lng, 1800, 10));
+        foreach ($this->textQueriesForCategory($category, $settings['text_search_mode']) as $query) {
+            $places = array_merge($places, $placesClient->searchTextNearby($query, $lat, $lng, $settings['nearby_radius_meters'], $settings['text_search_page_size'], $fieldOptions));
         }
 
         return $this->deduplicatePlaces($places);
     }
 
     /**
+     * @param mixed $settings
+     *
+     * @return array{nearby_radius_meters:int, nearby_max_results:int, text_search_page_size:int, text_search_mode:string, max_total_places:int, cache_ttl_seconds:int, empty_cache_ttl_seconds:int, include_photos:bool, include_ratings:bool, include_opening_hours:bool, include_service_attributes:bool}
+     */
+    private function placesSettings(mixed $settings): array
+    {
+        $settings = is_array($settings) ? $settings : [];
+
+        return [
+            'nearby_radius_meters' => $this->boundedInt($settings['nearby_radius_meters'] ?? 1000, 100, 1000),
+            'nearby_max_results' => $this->boundedInt($settings['nearby_max_results'] ?? 20, 1, 20),
+            'text_search_page_size' => $this->boundedInt($settings['text_search_page_size'] ?? 10, 1, 20),
+            'text_search_mode' => $this->textSearchMode($settings['text_search_mode'] ?? 'category_only'),
+            'max_total_places' => $this->boundedInt($settings['max_total_places'] ?? 60, 1, 120),
+            'cache_ttl_seconds' => $this->boundedInt($settings['cache_ttl_seconds'] ?? 300, 60, 900),
+            'empty_cache_ttl_seconds' => $this->boundedInt($settings['empty_cache_ttl_seconds'] ?? 60, 30, 300),
+            'include_photos' => $this->enabledSetting($settings['include_photos'] ?? true),
+            'include_ratings' => $this->enabledSetting($settings['include_ratings'] ?? true),
+            'include_opening_hours' => $this->enabledSetting($settings['include_opening_hours'] ?? true),
+            'include_service_attributes' => $this->enabledSetting($settings['include_service_attributes'] ?? true),
+        ];
+    }
+
+    /**
+     * @param array{include_photos:bool, include_ratings:bool, include_opening_hours:bool, include_service_attributes:bool} $settings
+     * @return array<string, bool>
+     */
+    private function fieldOptions(array $settings): array
+    {
+        return [
+            'include_photos' => $settings['include_photos'],
+            'include_ratings' => $settings['include_ratings'],
+            'include_opening_hours' => $settings['include_opening_hours'],
+            'include_service_attributes' => $settings['include_service_attributes'],
+        ];
+    }
+
+    private function boundedInt(mixed $value, int $min, int $max): int
+    {
+        return max($min, min($max, (int) $value));
+    }
+
+    private function enabledSetting(mixed $value): bool
+    {
+        return in_array($value, [true, 1, '1', 'true', 'on', 'yes'], true);
+    }
+
+    private function textSearchMode(mixed $mode): string
+    {
+        return is_string($mode) && in_array($mode, ['off', 'category_only', 'always'], true) ? $mode : 'category_only';
+    }
+
+    /**
      * @return list<string>
      */
-    private function textQueriesForCategory(string $category): array
+    private function textQueriesForCategory(string $category, string $mode): array
     {
+        if ($mode === 'off') {
+            return [];
+        }
+
+        if ($mode === 'category_only' && in_array($category, ['all', 'todos'], true)) {
+            return [];
+        }
+
         return match ($category) {
             'tacos' => ['taquería', 'tacos'],
-            'antojitos', 'antojos' => ['antojitos mexicanos', 'tacos'],
+            'antojitos', 'antojos' => ['antojitos mexicanos', 'tacos', 'garnachas'],
             'cafe', 'cafes', 'coffee' => ['cafetería'],
-            'postres' => ['postres', 'heladería'],
+            'panaderia', 'panaderias', 'panadería', 'panaderías' => ['panadería', 'pastelería', 'bakery'],
+            'postres' => ['postres', 'heladería', 'pastelería', 'panadería'],
             'mariscos' => ['mariscos'],
             'hamburguesas' => ['hamburguesas'],
             'pizza', 'pizzas' => ['pizza'],
-            'all', 'todos' => ['taquería', 'tacos'],
+            'all', 'todos' => ['taquería', 'tacos', 'panadería', 'pastelería', 'antojitos mexicanos'],
             default => [],
         };
     }
@@ -375,6 +463,41 @@ final class GooglePlacesProxyController extends AbstractController
         }
 
         return false;
+    }
+
+    /**
+     * @param mixed $claimedGooglePlaceIds
+     * @return array<string, true>
+     */
+    private function claimedGooglePlaceIds(mixed $claimedGooglePlaceIds): array
+    {
+        if (!is_array($claimedGooglePlaceIds)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($claimedGooglePlaceIds as $placeId) {
+            if (!is_string($placeId)) {
+                continue;
+            }
+
+            $placeId = trim($placeId);
+            if ($placeId !== '') {
+                $ids[$placeId] = true;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param array<string, true> $claimedGooglePlaceIds
+     */
+    private function isClaimedGooglePlace(array $place, array $claimedGooglePlaceIds): bool
+    {
+        $placeId = is_string($place['id'] ?? null) ? trim($place['id']) : '';
+
+        return $placeId !== '' && isset($claimedGooglePlaceIds[$placeId]);
     }
 
     private function localizedTextValue(mixed $value): string

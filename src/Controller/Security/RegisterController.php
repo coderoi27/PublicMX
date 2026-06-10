@@ -7,6 +7,8 @@ namespace App\Controller\Security;
 use App\Entity\Public\PublicUser;
 use App\Entity\Public\PublicUserOtp;
 use App\Service\Public\BlockedEmailDomainClient;
+use App\Service\Public\LegalAcceptanceRecorder;
+use App\Service\Public\LegalDocumentClient;
 use App\Service\Public\OtpCodeFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -26,6 +28,8 @@ final class RegisterController extends AbstractController
         UserPasswordHasherInterface $passwordHasher,
         OtpCodeFactory $otpCodeFactory,
         BlockedEmailDomainClient $blockedEmailDomainClient,
+        LegalDocumentClient $legalDocumentClient,
+        LegalAcceptanceRecorder $legalAcceptanceRecorder,
         #[Autowire(service: 'limiter.public_register')] RateLimiterFactory $publicRegisterLimiter,
     ): Response {
         if ($request->isMethod('GET')) {
@@ -37,6 +41,7 @@ final class RegisterController extends AbstractController
         $email = trim((string) $request->request->get('email'));
         $password = (string) $request->request->get('password');
         $registrationOrigin = (string) ($request->request->get('registration_origin') ?: 'organic');
+        $acceptedLegal = $request->request->getBoolean('legal_terms');
         $limit = $publicRegisterLimiter->create(($request->getClientIp() ?? 'unknown') . '|' . mb_strtolower($email))->consume(1);
         if (!$limit->isAccepted()) {
             return $this->render('security/public_register.html.twig', [
@@ -47,6 +52,12 @@ final class RegisterController extends AbstractController
         if ($firstName === '' || $lastName === '' || $email === '' || $password === '') {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'Todos los campos son obligatorios.',
+            ], new Response('', 422));
+        }
+
+        if (!$acceptedLegal) {
+            return $this->render('security/public_register.html.twig', [
+                'error' => 'Debes aceptar los términos y el aviso de privacidad vigentes para crear tu cuenta.',
             ], new Response('', 422));
         }
 
@@ -83,11 +94,44 @@ final class RegisterController extends AbstractController
 
         $entityManager->persist($user);
         $entityManager->persist($otp);
+        $legalAcceptanceRecorder->recordMany(
+            $user,
+            $this->registrationLegalDocuments($legalDocumentClient),
+            $request,
+            'registration'
+        );
         $entityManager->flush();
 
         return $this->render('security/public_verify_otp.html.twig', [
             'email' => mb_strtolower($email),
             'dev_otp_code' => $this->getParameter('kernel.environment') === 'dev' ? $code : null,
         ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function registrationLegalDocuments(LegalDocumentClient $legalDocumentClient): array
+    {
+        $requiredSlugs = ['terminos-publico', 'aviso-privacidad'];
+        $documents = array_values(array_filter(
+            $legalDocumentClient->fetchPublishedDocuments(),
+            static fn (array $document): bool => isset($document['slug'])
+                && is_string($document['slug'])
+                && in_array($document['slug'], $requiredSlugs, true)
+        ));
+
+        if (count($documents) === count($requiredSlugs)) {
+            return $documents;
+        }
+
+        foreach ($requiredSlugs as $slug) {
+            $document = $legalDocumentClient->fetchDocument($slug);
+            if (is_array($document)) {
+                $documents[$slug] = $document;
+            }
+        }
+
+        return array_values($documents);
     }
 }

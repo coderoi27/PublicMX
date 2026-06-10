@@ -17,6 +17,15 @@
                 <input type="email" name="email" required placeholder="Email" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
                 <input type="password" name="password" required placeholder="Password" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
                 <input type="hidden" name="registration_origin" value="organic">
+                <label style="display:flex; gap:0.65rem; align-items:flex-start; margin:0 0 1rem; color:#374151; font-size:0.9rem; line-height:1.45;">
+                    <input type="checkbox" name="legal_terms" value="1" required style="margin-top:0.2rem;">
+                    <span>
+                        Acepto los
+                        <a href="{{ path('public_legal_show', { slug: 'terminos-publico' }) }}" target="_blank" rel="noreferrer" style="color:#f97316; font-weight:700;">términos vigentes</a>
+                        y el
+                        <a href="{{ path('public_legal_show', { slug: 'aviso-privacidad' }) }}" target="_blank" rel="noreferrer" style="color:#f97316; font-weight:700;">aviso de privacidad</a>.
+                    </span>
+                </label>
                 <button type="submit" style="width: 100%; border: none; border-radius: 12px; background: #111827; color: #ffffff; padding: 0.9rem 1rem; font-weight: 700;">Continuar</button>
             </form>
         </section>

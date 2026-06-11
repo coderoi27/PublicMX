@@ -27,6 +27,7 @@ security:
             logout:
                 path: _security_logout
                 target: public_login
+            custom_authenticator: App\Security\GoogleAuthenticator
 
     access_control:
         - { path: ^/alpha/access$, roles: PUBLIC_ACCESS }

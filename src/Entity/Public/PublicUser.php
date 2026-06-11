@@ -10,6 +10,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'public_users')]
+#[ORM\UniqueConstraint(name: 'uniq_public_users_google_id', columns: ['google_id'])]
 #[ORM\HasLifecycleCallbacks]
 class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
 {
@@ -43,6 +44,12 @@ class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $emailVerifiedAt = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $googleId = null;
+
+    #[ORM\Column(length: 1024, nullable: true)]
+    private ?string $googleAvatar = null;
 
     #[ORM\Column]
     private \DateTimeImmutable $createdAt;
@@ -211,5 +218,29 @@ class PublicUser implements UserInterface, PasswordAuthenticatedUserInterface
             self::STATUS_BLOCKED => [self::STATUS_ACTIVE, self::STATUS_DELETED],
             self::STATUS_DELETED => [],
         ];
+    }
+
+    public function getGoogleId(): ?string
+    {
+        return $this->googleId;
+    }
+
+    public function setGoogleId(?string $googleId): self
+    {
+        $this->googleId = $googleId;
+
+        return $this;
+    }
+
+    public function getGoogleAvatar(): ?string
+    {
+        return $this->googleAvatar;
+    }
+
+    public function setGoogleAvatar(?string $googleAvatar): self
+    {
+        $this->googleAvatar = $googleAvatar;
+
+        return $this;
     }
 }

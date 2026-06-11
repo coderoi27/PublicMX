@@ -1,15 +1,16 @@
 {% extends 'base.html.twig' %}
 
 {% block title %}Mi Monchis MX Alpha{% endblock %}
+{% block html_class %}alpha-gate-document{% endblock %}
+{% block body_class %}alpha-gate-page{% endblock %}
+{% block importmap %}{{ importmap('alpha_gate') }}{% endblock %}
 
 {% block body %}
     <main class="alpha-gate">
-        <section class="alpha-gate__card">
-            {% if logo_url is defined and logo_url %}
-                <img src="{{ asset(logo_url) }}" alt="Mi Monchis" class="alpha-gate__logo">
-            {% endif %}
-            <p class="alpha-gate__eyebrow">Alpha exclusiva</p>
-            <h1 class="alpha-gate__title">Bienvenido a la exploración de Mi Monchis</h1>
+        <section class="alpha-gate__card" aria-labelledby="alpha-gate-title" data-alpha-gate>
+            <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis MX" class="alpha-gate__logo is-presenting" data-alpha-present="1">
+            <p class="alpha-gate__eyebrow is-presenting" data-alpha-present="2">Alpha exclusiva</p>
+            <h1 class="alpha-gate__title" id="alpha-gate-title" data-alpha-typewriter="Explora tus antojos cerca de ti"></h1>
             {% set error_messages = app.flashes('error') %}
             {% set success_messages = app.flashes('success') %}
             {% set alpha_access_urls = app.flashes('alpha_access_url') %}
@@ -28,30 +29,50 @@
                 </div>
             {% endif %}
 
-            <p class="alpha-gate__copy">
-                Ingresa tu correo y te enviaremos un enlace privado con token temporal para explorar la demo.
+            <p class="alpha-gate__copy is-presenting" data-alpha-present="3">
+                Ingresa tu correo y te enviaremos un acceso privado para explorar la demo.
             </p>
 
-            <form method="post" action="{{ path('public_alpha_invitation_request') }}" class="alpha-gate__form">
-                <label class="alpha-gate__label" for="email">Correo del usuario publico</label>
-                <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    class="alpha-gate__input"
-                    placeholder="tu-correo@dominio.com"
-                    required
-                >
-                <button type="submit" class="alpha-gate__submit">Enviar enlace de invitacion</button>
+            <form method="post" action="{{ path('public_alpha_invitation_request') }}" class="alpha-gate__form is-presenting" data-alpha-present="4">
+                <label class="alpha-gate__label" for="email">Correo electrónico</label>
+                <div class="alpha-gate__input-shell">
+                    <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        class="alpha-gate__input"
+                        placeholder="tu@correo.com"
+                        required
+                    >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" class="alpha-gate__input-icon">
+                        <path d="M4 6h16v12H4z" />
+                        <path d="m4 7 8 6 8-6" />
+                    </svg>
+                </div>
+                <button type="submit" class="alpha-gate__submit">
+                    <span>Enviar enlace de invitación</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h14" />
+                        <path d="m13 6 6 6-6 6" />
+                    </svg>
+                </button>
             </form>
 
-            <div class="alpha-gate__hint">
-                El enlace incluye un token con caducidad. Si vence, el usuario vuelve a esta pantalla para solicitar uno nuevo.
+            <div class="alpha-gate__hint is-presenting" data-alpha-present="5">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 8v5l3 2" />
+                    <path d="M9 2h6" />
+                    <path d="M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" />
+                </svg>
+                <span>El enlace caduca. Si vence, verás de nuevo esta pantalla para solicitar una nueva invitación.</span>
             </div>
-            <div class="alpha-gate__legal">
+            <div class="alpha-gate__legal is-presenting" data-alpha-present="6">
                 <p>Al solicitar acceso aceptas el tratamiento de tus datos conforme a nuestro aviso de privacidad.</p>
-                {% include 'public/_partials/legal_links.html.twig' %}
             </div>
         </section>
     </main>
+    <footer class="alpha-gate-footer">
+        {% include 'public/_partials/legal_links.html.twig' %}
+        <p>© 2026 Mi Monchis. Hecho con antojo.</p>
+    </footer>
 {% endblock %}

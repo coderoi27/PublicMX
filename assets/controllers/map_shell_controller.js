@@ -22,8 +22,18 @@ export default class extends Controller {
         'profileTabButton',
         'detailSheet',
         'detailSheetBody',
+        'menuButton',
+        'menuPanel',
+        'desktopSearchInput',
+        'mobileSearchInput',
+        'authModal',
+        'authModalTitle',
+        'authModalCopy',
+        'authPasswordInput',
         'heroLocation',
         'sourceFilterRow',
+        'menuSourceFilterRow',
+        'menuCategoryList',
         'chipRow',
         'categoryChip',
         'notificationsButton',
@@ -100,6 +110,7 @@ export default class extends Controller {
         this.joyitasOnly = false;
         this.activeSourceFilter = 'all';
         this.activeServiceFilter = 'all';
+        this.activeSearchQuery = '';
         this.map = null;
         this.markers = [];
         this.infoWindow = null;
@@ -108,10 +119,12 @@ export default class extends Controller {
         this.walkthroughTypingTimer = null;
         this.walkthroughHideTimer = null;
         this.mapIdleTimer = null;
+        this.searchFilterTimer = null;
         this.walkthroughPredictions = [];
         this.walkthroughSelection = null;
         this.userMarker = null;
         this.notificationsOpen = false;
+        this.menuOpen = false;
         this.locationSwitcherOpen = false;
         this.locationSwitcherMode = 'locations';
         this.exploreMode = 'map';
@@ -122,6 +135,9 @@ export default class extends Controller {
         this.isSyncingMapViewport = false;
         this.pendingViewportCenter = this.hasUserCoordinates() ? this.currentUserPosition() : null;
         this.currentLocationLabel = this.hasHeroLocationTarget ? this.heroLocationTarget.textContent.trim() : '';
+        if (this.currentLocationLabel) {
+            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
+        }
         this.restoreExploreMode();
         this.restorePersistedLocationContext();
         this.renderFavoritesSummary();
@@ -145,6 +161,9 @@ export default class extends Controller {
         }
         if (this.mapIdleTimer) {
             window.clearTimeout(this.mapIdleTimer);
+        }
+        if (this.searchFilterTimer) {
+            window.clearTimeout(this.searchFilterTimer);
         }
     }
 
@@ -277,6 +296,10 @@ export default class extends Controller {
 
     toggleNotifications() {
         this.notificationsOpen = !this.notificationsOpen;
+        if (this.notificationsOpen) {
+            this.menuOpen = false;
+            this.renderMenuState();
+        }
         this.renderNotificationsState();
     }
 
@@ -293,8 +316,38 @@ export default class extends Controller {
         }
     }
 
+    toggleMenu() {
+        this.menuOpen = !this.menuOpen;
+        if (this.menuOpen) {
+            this.notificationsOpen = false;
+            this.locationSwitcherOpen = false;
+            this.renderNotificationsState();
+            this.renderLocationSwitcherState();
+        }
+        this.renderMenuState();
+    }
+
+    closeMenu() {
+        this.menuOpen = false;
+        this.renderMenuState();
+    }
+
+    closeMenuOnEscape(event) {
+        if (event.key === 'Escape') {
+            this.closeMenu();
+        }
+    }
+
     toggleLocationSwitcher(event) {
         const requestedMode = event?.currentTarget?.dataset?.switcherMode ?? 'locations';
+        if (requestedMode === 'locations' && !this.requireAuthentication({
+            title: 'Guarda tus ubis en Mi Monchis',
+            copy: 'Inicia sesión para ver, guardar y reutilizar tus direcciones desde cualquier dispositivo.',
+            status: 'Inicia sesión para administrar Mis ubis.',
+        })) {
+            return;
+        }
+
         if (this.locationSwitcherOpen && this.locationSwitcherMode === requestedMode) {
             this.locationSwitcherOpen = false;
         } else {
@@ -311,18 +364,42 @@ export default class extends Controller {
     }
 
     showFavoritesSection() {
+        if (!this.requireAuthentication({
+            title: 'Tus favoritos viven en tu cuenta',
+            copy: 'Inicia sesión para guardar locales, recuperarlos después y armar tu colección de antojos.',
+            status: 'Inicia sesión para ver tus favoritos.',
+        })) {
+            return;
+        }
+
         this.activeSection = 'favorites';
         this.renderActiveSection();
         this.logInteraction('public_section_changed', 'ui_section', null, { section: 'favorites' });
     }
 
     showAddressesSection() {
+        if (!this.requireAuthentication({
+            title: 'Guarda tus ubis en Mi Monchis',
+            copy: 'Inicia sesión para crear direcciones, elegir tu ubi principal y explorar más rápido.',
+            status: 'Inicia sesión para guardar Mis ubis.',
+        })) {
+            return;
+        }
+
         this.activeSection = 'addresses';
         this.renderActiveSection();
         this.logInteraction('public_section_changed', 'ui_section', null, { section: 'addresses' });
     }
 
     showProfileSection() {
+        if (!this.requireAuthentication({
+            title: 'Tu perfil se activa al iniciar sesión',
+            copy: 'Entra a tu cuenta para consultar favoritos, ubis guardadas y preferencias de Mi Monchis.',
+            status: 'Inicia sesión para ver tu perfil.',
+        })) {
+            return;
+        }
+
         this.activeSection = 'profile';
         this.renderActiveSection();
         this.logInteraction('public_section_changed', 'ui_section', null, { section: 'profile' });
@@ -364,6 +441,12 @@ export default class extends Controller {
         }
     }
 
+    closeAuthModalOnEscape(event) {
+        if (event.key === 'Escape') {
+            this.closeAuthModal();
+        }
+    }
+
     async selectSavedAddress(event) {
         const { lat, lng, label } = event.currentTarget.dataset;
         this.applyCoordinates(Number(lat), Number(lng));
@@ -401,6 +484,36 @@ export default class extends Controller {
         this.logInteraction('public_service_filter_changed', 'ui_filter', null, { service_filter: nextFilter });
     }
 
+    filterByDesktopSearch(event) {
+        const input = event?.currentTarget ?? (this.hasDesktopSearchInputTarget ? this.desktopSearchInputTarget : null);
+        if (!input) {
+            return;
+        }
+
+        this.activeSearchQuery = input.value.trim();
+        if (this.searchFilterTimer) {
+            window.clearTimeout(this.searchFilterTimer);
+        }
+
+        this.searchFilterTimer = window.setTimeout(() => {
+            this.applyVisibleFilters('No encontré locales para esa búsqueda.');
+        }, 180);
+    }
+
+    async submitDesktopSearch(event) {
+        event.preventDefault();
+        if (this.searchFilterTimer) {
+            window.clearTimeout(this.searchFilterTimer);
+        }
+        const input = event.currentTarget.querySelector('input[type="search"]')
+            ?? (this.hasDesktopSearchInputTarget ? this.desktopSearchInputTarget : null)
+            ?? (this.hasMobileSearchInputTarget ? this.mobileSearchInputTarget : null);
+        if (input) {
+            this.activeSearchQuery = input.value.trim();
+        }
+        await this.applyVisibleFilters('No encontré locales para esa búsqueda.');
+    }
+
     async focusLocation(event) {
         const interactiveElement = event.target.closest('button, a, input, label, form');
         if (interactiveElement) {
@@ -436,8 +549,11 @@ export default class extends Controller {
     }
 
     async toggleFavorite(event) {
-        if (!this.authenticatedValue) {
-            this.setStatus('Inicia sesión para guardar favoritos.');
+        if (!this.requireAuthentication({
+                title: 'Mi Monchis',
+                copy: 'Inicia sesión para guardar tus antojos favoritos y volver a ellos cuando quieras.',
+                status: 'Inicia sesión para guardar favoritos.',
+            })) {
             return;
         }
 
@@ -500,10 +616,73 @@ export default class extends Controller {
         }
     }
 
+    openAuthModal(options = {}) {
+        if (!this.hasAuthModalTarget) {
+            return;
+        }
+
+        if (this.hasAuthModalTitleTarget && options.title) {
+            this.authModalTitleTarget.textContent = options.title;
+        }
+
+        if (this.hasAuthModalCopyTarget && options.copy) {
+            this.authModalCopyTarget.textContent = options.copy;
+        }
+
+        this.authModalTarget.classList.remove('is-hidden');
+        this.authModalTarget.classList.add('is-visible');
+        document.documentElement.classList.add('has-auth-modal-open');
+
+        const firstInput = this.authModalTarget.querySelector('input[name="_username"]');
+        window.setTimeout(() => {
+            firstInput?.focus({ preventScroll: true });
+        }, 260);
+    }
+
+    requireAuthentication(options = {}) {
+        if (this.authenticatedValue) {
+            return true;
+        }
+
+        this.locationSwitcherOpen = false;
+        this.renderLocationSwitcherState();
+        this.openAuthModal(options);
+
+        if (options.status) {
+            this.setStatus(options.status);
+        }
+
+        return false;
+    }
+
+    closeAuthModal() {
+        if (!this.hasAuthModalTarget) {
+            return;
+        }
+
+        this.authModalTarget.classList.remove('is-visible');
+        this.authModalTarget.classList.add('is-hidden');
+        document.documentElement.classList.remove('has-auth-modal-open');
+    }
+
+    toggleAuthPasswordVisibility(event) {
+        if (!this.hasAuthPasswordInputTarget) {
+            return;
+        }
+
+        const nextType = this.authPasswordInputTarget.type === 'password' ? 'text' : 'password';
+        this.authPasswordInputTarget.type = nextType;
+        event.currentTarget.setAttribute('aria-label', nextType === 'password' ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    }
+
     async saveAddress(event) {
         event.preventDefault();
 
-        if (!this.authenticatedValue) {
+        if (!this.requireAuthentication({
+                title: 'Mi Monchis',
+                copy: 'Inicia sesión para guardar direcciones y recuperar tus zonas favoritas.',
+                status: 'Inicia sesión para guardar direcciones.',
+            })) {
             this.setAddressStatus('Inicia sesión para guardar direcciones.');
             return;
         }
@@ -659,6 +838,7 @@ export default class extends Controller {
 
     async applyCategoryFilter(event) {
         const nextFilter = event.currentTarget.dataset.categoryFilter ?? 'all';
+        const triggeredFromMenu = event.currentTarget.closest('.mobile-map-app__menu') !== null;
         if (nextFilter === '__joyitas') {
             this.joyitasOnly = !this.joyitasOnly;
         } else if (nextFilter.startsWith('__source:')) {
@@ -667,7 +847,14 @@ export default class extends Controller {
             this.activeCategoryFilter = nextFilter;
         }
         this.renderCategoryChips(this.currentLocations);
+        if (triggeredFromMenu) {
+            this.closeMenu();
+        }
 
+        await this.applyVisibleFilters('No encontré locales para esa categoría.');
+    }
+
+    async applyVisibleFilters(emptyMessage = 'No encontré locales con esos filtros.') {
         this.visibleLocations = this.filteredLocations(this.currentLocations);
         const selectedStillVisible = this.visibleLocations.find((location) => this.locationKey(location) === this.selectedLocationId);
         if (!selectedStillVisible) {
@@ -679,8 +866,10 @@ export default class extends Controller {
         await this.renderCanvas(this.visibleLocations);
         this.syncFavoriteButtons();
         this.syncActiveCard();
+        this.refreshDetailSheet();
+
         if (this.visibleLocations.length === 0) {
-            this.setStatus('No encontré locales para esa categoría.');
+            this.setStatus(emptyMessage);
         }
     }
 
@@ -736,8 +925,160 @@ export default class extends Controller {
         if (this.hasExploreListGridTarget) {
             this.exploreListGridTarget.innerHTML = locations.length === 0
                 ? '<article class="mobile-map-app__empty-state mobile-map-app__empty-state--list"><strong>No encontré locales en esta zona</strong><p>Ajusta la ubicación, mueve el mapa o cambia de categoría.</p></article>'
-                : markup;
+                : this.exploreVisualMarkup(locations, markup);
         }
+    }
+
+    exploreVisualMarkup(locations, cardsMarkup) {
+        const nearbyLocations = locations.slice(0, 6);
+
+        return `
+            <section class="mobile-map-app__visual-section">
+                <div class="mobile-map-app__visual-head">
+                    <h3>Nearby Live</h3>
+                    <button type="button" data-action="map-shell#setMapMode">Ver mapa</button>
+                </div>
+                <div class="mobile-map-app__nearby-live-row">
+                    ${nearbyLocations.map((location) => `
+                        <button
+                            type="button"
+                            class="mobile-map-app__nearby-live-card mobile-map-card__media--${this.mediaTone(location)} ${this.locationVisualPhotoUrl(location) ? 'has-photo' : ''}"
+                            ${this.mediaStyle(location)}
+                            data-action="click->map-shell#openVisualLocation"
+                            data-location-key="${this.escapeHtml(this.locationKey(location))}"
+                        >
+                            <span>${this.escapeHtml(this.locationAvatarLabel(location))}</span>
+                            <strong>${this.escapeHtml(this.shortLocationName(location))}</strong>
+                            <small>★ ${this.escapeHtml(this.locationRating(location))}</small>
+                        </button>
+                    `).join('')}
+                </div>
+            </section>
+
+            <section class="mobile-map-app__visual-section">
+                <div class="mobile-map-app__visual-head">
+                    <h3>Explora por categorías</h3>
+                    <button type="button" data-category-filter="all" data-action="map-shell#applyCategoryFilter">Ver todo</button>
+                </div>
+                <div class="mobile-map-app__category-orbit">
+                    ${this.categoryVisualPillsMarkup(locations)}
+                </div>
+            </section>
+
+            <section class="mobile-map-app__visual-section">
+                <div class="mobile-map-app__visual-head">
+                    <h3>Qué hay cerca de ti</h3>
+                    <button type="button" data-action="map-shell#setMapMode">Ver todo</button>
+                </div>
+                <div class="mobile-map-app__visual-card-grid">
+                    ${cardsMarkup}
+                </div>
+            </section>
+
+            <section class="mobile-map-app__visual-section">
+                <div class="mobile-map-app__visual-head">
+                    <h3>Reseñas de la comunidad</h3>
+                    <button type="button">Ver todo</button>
+                </div>
+                <div class="mobile-map-app__review-teaser-row">
+                    ${this.communityReviewTeasersMarkup(locations)}
+                </div>
+            </section>
+        `;
+    }
+
+    categoryVisualPillsMarkup(locations) {
+        const categoryKeys = this.availableCategoryKeys(locations).slice(0, 7);
+        return categoryKeys.map((categoryKey) => {
+            const isAll = categoryKey === 'all';
+            const label = isAll ? 'Todo' : this.categoryDisplayName(categoryKey);
+            return `
+                <button
+                    type="button"
+                    class="mobile-map-app__category-orbit-item ${this.activeCategoryFilter === categoryKey ? 'is-active' : ''}"
+                    data-category-filter="${this.escapeHtml(categoryKey)}"
+                    data-action="map-shell#applyCategoryFilter"
+                    ${!isAll ? `style="--category-orbit-color:${this.escapeHtml(this.categoryColor(categoryKey))};"` : ''}
+                >
+                    <span>${this.categoryIconSvg(categoryKey)}</span>
+                    <strong>${this.escapeHtml(label)}</strong>
+                </button>
+            `;
+        }).join('');
+    }
+
+    communityReviewTeasersMarkup(locations) {
+        const candidates = locations.slice(0, 2);
+        if (candidates.length === 0) {
+            return '<article class="mobile-map-app__review-teaser"><strong>Sin reseñas aún</strong><p>La comunidad empezará a aparecer aquí conforme el alpha avance.</p></article>';
+        }
+
+        return candidates.map((location, index) => `
+            <article class="mobile-map-app__review-teaser">
+                <div class="mobile-map-app__review-photo mobile-map-card__media--${this.mediaTone(location)} ${this.locationVisualPhotoUrl(location) ? 'has-photo' : ''}" ${this.mediaStyle(location)}>
+                    <span>★ ${this.escapeHtml(this.locationRating(location))}</span>
+                </div>
+                <div>
+                    <strong>${index === 0 ? 'Ana G.' : 'Carlos R.'}</strong>
+                    <p>${this.escapeHtml(this.shortLocationName(location))} en ${this.escapeHtml(location.location_name ?? 'Mi Monchis')}</p>
+                </div>
+            </article>
+        `).join('');
+    }
+
+    async openVisualLocation(event) {
+        const locationKey = event.currentTarget.dataset.locationKey ?? '';
+        if (locationKey === '') {
+            return;
+        }
+
+        const location = this.currentLocations.find((item) => this.locationKey(item) === locationKey);
+        if (!location) {
+            return;
+        }
+
+        this.setSelectedLocation(locationKey);
+        const enrichedLocation = await this.enrichLocationIfNeeded(location);
+        this.renderDetailSheet(enrichedLocation);
+    }
+
+    shortLocationName(location) {
+        const name = location.location_name ?? location.merchant_name ?? 'Local';
+        return String(name).split(/\s+/).slice(0, 2).join(' ');
+    }
+
+    locationAvatarLabel(location) {
+        const category = this.locationCategoryKey(location);
+        if (category !== 'all') {
+            return this.categoryDisplayName(category).slice(0, 1).toUpperCase();
+        }
+
+        return (location.location_name ?? location.merchant_name ?? 'M').slice(0, 1).toUpperCase();
+    }
+
+    locationRating(location) {
+        const rating = Number(location.rating ?? location.meta?.rating ?? 4.8);
+        return Number.isFinite(rating) ? rating.toFixed(1) : '4.8';
+    }
+
+    categoryIconSvg(categoryKey) {
+        const normalized = this.normalizeComparisonText(categoryKey);
+        if (normalized.includes('taco')) {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15c2-5 6-8 12-8 2 0 4 2 4 4v4H4Z"/><path d="M7 15c1-2 3-3 5-3s4 1 5 3"/><path d="M8 10h.01M12 9h.01M16 10h.01"/></svg>';
+        }
+        if (normalized.includes('hamburg') || normalized.includes('burger')) {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11c1-4 4-6 7-6s6 2 7 6H5Z"/><path d="M4 14h16"/><path d="M5 18h14"/><path d="M7 11h.01M12 9h.01M17 11h.01"/></svg>';
+        }
+        if (normalized.includes('cafe') || normalized.includes('coffee')) {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h11v6a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8Z"/><path d="M16 10h2a2 2 0 0 1 0 4h-2"/><path d="M8 4v2M12 4v2"/></svg>';
+        }
+        if (normalized.includes('sushi')) {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="10" rx="2"/><circle cx="10" cy="12" r="2"/><path d="M14 10h3M14 14h3"/></svg>';
+        }
+        if (categoryKey === 'all') {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/><path d="M5 19 19 5"/></svg>';
+        }
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16"/><path d="M6 7h12"/><path d="M8 17h8"/><path d="M12 4v16"/></svg>';
     }
 
     renderListSkeleton(count = 4) {
@@ -789,9 +1130,28 @@ export default class extends Controller {
             const matchesJoyita = !this.joyitasOnly || this.locationIsJoyita(location);
             const matchesSource = this.activeSourceFilter === 'all' || this.locationSourceGroup(location) === this.activeSourceFilter;
             const matchesService = this.locationMatchesService(location);
+            const matchesSearch = this.locationMatchesSearch(location);
 
-            return matchesCategory && matchesJoyita && matchesSource && matchesService;
+            return matchesCategory && matchesJoyita && matchesSource && matchesService && matchesSearch;
         });
+    }
+
+    locationMatchesSearch(location) {
+        const query = this.normalizeComparisonText(this.activeSearchQuery ?? '');
+        if (query === '') {
+            return true;
+        }
+
+        const haystack = this.normalizeComparisonText([
+            location.location_name,
+            location.merchant_name,
+            location.short_address,
+            location.category_name,
+            location.category_slug,
+            this.locationCategoryKey(location) !== 'all' ? this.categoryDisplayName(this.locationCategoryKey(location)) : '',
+        ].filter(Boolean).join(' '));
+
+        return haystack.includes(query);
     }
 
     renderCategoryChips(locations) {
@@ -809,8 +1169,11 @@ export default class extends Controller {
         }
 
         this.sourceFilterRowTarget.innerHTML = this.sourceFilterSegmentedMarkup(locations);
+        if (this.hasMenuSourceFilterRowTarget) {
+            this.menuSourceFilterRowTarget.innerHTML = this.sourceFilterSegmentedMarkup(locations, 'menu');
+        }
 
-        this.chipRowTarget.innerHTML = categoryKeys.map((categoryKey) => {
+        const categoryMarkup = categoryKeys.map((categoryKey) => {
             const label = categoryKey === 'all' ? 'Todos' : this.categoryDisplayName(categoryKey);
             const chipStyle = categoryKey === 'all'
                 ? ''
@@ -829,9 +1192,14 @@ export default class extends Controller {
                 </button>
             `;
         }).join('') + this.joyitasChipMarkup(locations);
+
+        this.chipRowTarget.innerHTML = categoryMarkup;
+        if (this.hasMenuCategoryListTarget) {
+            this.menuCategoryListTarget.innerHTML = categoryMarkup || '<span class="mobile-map-app__menu-empty">Sin categorías disponibles</span>';
+        }
     }
 
-    sourceFilterSegmentedMarkup(locations) {
+    sourceFilterSegmentedMarkup(locations, variant = 'segmented') {
         const availableSources = this.availableSourceKeys(locations);
         if (availableSources.length <= 1) {
             return '';
@@ -847,7 +1215,7 @@ export default class extends Controller {
             .map(([sourceKey, label]) => `
                 <button
                     type="button"
-                    class="mobile-map-app__segmented-btn ${this.activeSourceFilter === sourceKey ? 'is-active' : ''}"
+                    class="${variant === 'menu' ? 'mobile-map-app__menu-filter' : 'mobile-map-app__segmented-btn'} ${this.activeSourceFilter === sourceKey ? 'is-active' : ''}"
                     data-category-filter="__source:${this.escapeHtml(sourceKey)}"
                     data-action="map-shell#applyCategoryFilter"
                 >
@@ -1483,36 +1851,51 @@ export default class extends Controller {
         const message = '¿estás listo para explorar tu antojo?';
         let index = 0;
 
-        const typeNextCharacter = () => {
-            if (!this.hasWalkthroughCopyTarget) {
-                return;
-            }
+        if (!this.hasWalkthroughCopyTarget) {
+            return;
+        }
 
+        this.walkthroughCopyTarget.textContent = '';
+
+        if (this.hasWalkthroughLogoTarget) {
+            this.walkthroughLogoTarget.classList.remove('is-hidden');
+            this.walkthroughLogoTarget.classList.add('is-visible');
+        }
+
+        const typeNextCharacter = () => {
             this.walkthroughCopyTarget.textContent = message.slice(0, index);
 
             if (index < message.length) {
                 index += 1;
-                this.walkthroughTypingTimer = window.setTimeout(typeNextCharacter, 52);
+                this.walkthroughTypingTimer = window.setTimeout(typeNextCharacter, 34);
                 return;
             }
 
             window.setTimeout(() => {
-                this.walkthroughFormTarget.classList.remove('is-hidden');
-                this.walkthroughFormTarget.classList.add('is-visible');
-            }, 160);
+                if (this.hasWalkthroughFormTarget) {
+                    this.walkthroughFormTarget.classList.remove('is-hidden');
+                    this.walkthroughFormTarget.classList.add('is-visible');
+                }
+            }, 180);
 
             window.setTimeout(() => {
-                this.walkthroughGeoButtonTarget.classList.remove('is-hidden');
-                this.walkthroughGeoButtonTarget.classList.add('is-visible');
-            }, 560);
-
-            window.setTimeout(() => {
-                this.walkthroughLogoTarget.classList.remove('is-hidden');
-                this.walkthroughLogoTarget.classList.add('is-visible');
-            }, 980);
+                if (this.hasWalkthroughGeoButtonTarget) {
+                    this.walkthroughGeoButtonTarget.classList.remove('is-hidden');
+                    this.walkthroughGeoButtonTarget.classList.add('is-visible');
+                }
+            }, 280);
         };
 
         typeNextCharacter();
+    }
+
+    goBackFromWalkthrough() {
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+
+        this.setWalkthroughError('No hay una pantalla anterior disponible en esta sesión.');
     }
 
     hasSeenWalkthrough() {
@@ -1825,17 +2208,42 @@ export default class extends Controller {
         this.walkthroughSuggestionsTarget.classList.add('is-hidden');
     }
 
-    updateHeroLocation(label) {
-        if (this.hasHeroLocationTarget && label) {
-            this.heroLocationTarget.textContent = label;
+    updateHeroLocation(label, options = {}) {
+        const displayLabel = this.describeLocationLabel(label);
+        if (this.hasHeroLocationTarget && displayLabel) {
+            this.heroLocationTarget.textContent = displayLabel;
         }
-        if (this.hasHeroLocationDesktopTarget && label) {
-            this.heroLocationDesktopTarget.textContent = label;
+        if (this.hasHeroLocationDesktopTarget && displayLabel) {
+            this.heroLocationDesktopTarget.textContent = displayLabel;
         }
         if (label) {
-            this.currentLocationLabel = label;
-            this.persistLocationContext();
+            this.currentLocationLabel = displayLabel;
+            if (options.persist !== false) {
+                this.persistLocationContext();
+            }
         }
+    }
+
+    describeLocationLabel(label) {
+        const rawLabel = String(label ?? '').trim();
+        if (rawLabel === '') {
+            return '';
+        }
+
+        const normalized = this.normalizeComparisonText(rawLabel);
+        if (/^(avenida|av|calzada|calz|boulevard|blvd|carretera|colonia|col|codigo postal|cp|zona|ubicacion actual)\b/.test(normalized)) {
+            return rawLabel;
+        }
+
+        if (/^\d{5}(\b|$)/.test(rawLabel)) {
+            return `Código postal ${rawLabel}`;
+        }
+
+        if (/\b(av|av\.|avenida|calzada|calz\.|boulevard|blvd\.|carretera)\b/i.test(rawLabel) || /\d/.test(rawLabel)) {
+            return `Avenida ${rawLabel}`;
+        }
+
+        return `Colonia ${rawLabel}`;
     }
 
     googlePlacesStatusMessage(status) {
@@ -2415,12 +2823,24 @@ export default class extends Controller {
         }
     }
 
+    renderMenuState() {
+        if (!this.hasMenuPanelTarget) {
+            return;
+        }
+
+        this.menuPanelTarget.classList.toggle('is-hidden', !this.menuOpen);
+        this.menuPanelTarget.classList.toggle('is-visible', this.menuOpen);
+        document.documentElement.classList.toggle('has-public-menu-open', this.menuOpen);
+    }
+
     renderLocationSwitcherState() {
         if (!this.hasLocationSwitcherTarget) {
             return;
         }
 
         this.locationSwitcherTarget.classList.toggle('is-hidden', !this.locationSwitcherOpen);
+        this.locationSwitcherTarget.classList.toggle('is-service-menu', this.locationSwitcherOpen && this.locationSwitcherMode === 'services');
+        this.locationSwitcherTarget.classList.toggle('is-location-menu', this.locationSwitcherOpen && this.locationSwitcherMode !== 'services');
 
         if (this.locationSwitcherOpen) {
             if (this.locationSwitcherMode === 'services') {
@@ -2502,6 +2922,8 @@ export default class extends Controller {
     }
 
     renderActiveSection() {
+        this.closeMenu();
+
         const sections = {
             explore: this.hasExploreSectionTarget ? this.exploreSectionTarget : null,
             favorites: this.hasFavoritesSectionTarget ? this.favoritesSectionTarget : null,
@@ -2604,23 +3026,13 @@ export default class extends Controller {
 
         if (persistedContext?.label) {
             this.currentLocationLabel = String(persistedContext.label);
-            if (this.hasHeroLocationTarget) {
-                this.heroLocationTarget.textContent = this.currentLocationLabel;
-            }
-            if (this.hasHeroLocationDesktopTarget) {
-                this.heroLocationDesktopTarget.textContent = this.currentLocationLabel;
-            }
+            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
             return;
         }
 
         if (hasServerCoordinates) {
             this.currentLocationLabel = 'Ubicación actual';
-            if (this.hasHeroLocationTarget) {
-                this.heroLocationTarget.textContent = this.currentLocationLabel;
-            }
-            if (this.hasHeroLocationDesktopTarget) {
-                this.heroLocationDesktopTarget.textContent = this.currentLocationLabel;
-            }
+            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
         }
     }
 
@@ -3050,6 +3462,62 @@ export default class extends Controller {
             || null;
     }
 
+    locationDescription(location, reviewSnippet = '') {
+        const description = location.description
+            || location.short_description
+            || location.editorial_summary
+            || location.summary
+            || reviewSnippet
+            || '';
+
+        if (String(description).trim() !== '') {
+            return String(description).trim();
+        }
+
+        const categoryKey = this.locationCategoryKey(location);
+        const categoryLabel = categoryKey !== 'all' ? this.categoryDisplayName(categoryKey).toLowerCase() : 'antojitos';
+        const name = location.location_name ?? location.merchant_name ?? 'este local';
+        return `${name} forma parte de los lugares cercanos para explorar ${categoryLabel}. Revisa su ubicación, guarda el favorito o pide por WhatsApp cuando esté disponible.`;
+    }
+
+    detailGalleryMarkup(location) {
+        const urls = [
+            location.photo_url,
+            location.category_cover_photo_url,
+            location.category_default_photo_url,
+        ].filter((url, index, source) => url && source.indexOf(url) === index);
+
+        if (urls.length === 0) {
+            return '';
+        }
+
+        return `
+            <div class="mobile-map-app__detail-gallery" aria-label="Vista rápida">
+                ${urls.slice(0, 3).map((url) => `
+                    <div style="background-image:url('${this.escapeHtml(url)}')"></div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    buildProfileUrl(location) {
+        if (location.public_profile_url) {
+            return String(location.public_profile_url);
+        }
+
+        if (location.profile_url) {
+            return String(location.profile_url);
+        }
+
+        const locationRef = location.location_slug || location.location_id;
+        const locationId = Number.parseInt(String(location.location_id ?? ''), 10);
+        if (locationRef && Number.isInteger(locationId) && location.source_type !== 'google_places') {
+            return `/l/${encodeURIComponent(String(locationRef))}`;
+        }
+
+        return null;
+    }
+
     escapeHtml(value) {
         return String(value)
             .replaceAll('&', '&amp;')
@@ -3102,33 +3570,88 @@ export default class extends Controller {
         const hoursSummary = this.openingHoursSummary(location);
         const reviewSnippet = this.reviewSnippet(location);
         const detailKey = this.escapeHtml(this.locationKey(location));
+        const photoUrl = this.locationVisualPhotoUrl(location);
+        const heroStyle = photoUrl ? `style="background-image:url('${this.escapeHtml(photoUrl)}')"` : '';
+        const distanceLabel = this.formatDistance(location.distance_meters) || 'Cerca de ti';
+        const description = this.locationDescription(location, reviewSnippet);
+        const galleryMarkup = this.detailGalleryMarkup(location);
+        const profileUrl = this.buildProfileUrl(location);
 
         this.detailSheetBodyTarget.innerHTML = `
-            <div class="mobile-map-app__detail-hero ${this.locationVisualPhotoUrl(location) ? 'has-photo' : ''}" ${this.mediaStyle(location)}>
-                <span class="mobile-map-app__detail-source ${this.sourceBadgeClass(location)}">${this.escapeHtml(this.sourceTypeLabel(location.source_type))}</span>
-                <div class="mobile-map-app__detail-distance">${this.escapeHtml(this.formatDistance(location.distance_meters))}</div>
+            <div class="mobile-map-app__detail-grabber" aria-hidden="true"></div>
+            <div class="mobile-map-app__detail-hero mobile-map-app__detail-hero--${this.mediaTone(location)} ${photoUrl ? 'has-photo' : ''}" ${heroStyle}>
+                <div class="mobile-map-app__detail-overlay-actions">
+                    <button type="button" class="mobile-map-app__detail-float-button" data-action="click->map-shell#closeDetailSheet" aria-label="Cerrar detalle">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6 6 18 18" />
+                            <path d="M18 6 6 18" />
+                        </svg>
+                    </button>
+                    ${canFavorite ? `
+                        <button
+                            type="button"
+                            class="mobile-map-app__detail-float-button mobile-map-app__detail-float-button--favorite ${isFavorite ? 'is-active' : ''}"
+                            data-action="click->map-shell#toggleFavoriteFromSheet"
+                            data-location-id="${this.escapeHtml(String(location.location_id))}"
+                            aria-label="${isFavorite ? 'Quitar favorito' : 'Guardar favorito'}"
+                        >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 21s-7-4.4-9.2-8.5C.9 9.1 2.3 5 6.3 5c2.2 0 3.6 1.3 4.4 2.4C11.5 6.3 12.9 5 15.1 5c4 0 5.4 4.1 3.5 7.5C16.4 16.6 12 21 12 21Z" />
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+                <span class="mobile-map-app__detail-source ${this.sourceBadgeClass(location)}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m9 12 2 2 4-5" />
+                        <path d="M12 3 4.5 6.3v5.6c0 4.6 3.2 7.7 7.5 9.1 4.3-1.4 7.5-4.5 7.5-9.1V6.3L12 3Z" />
+                    </svg>
+                    ${this.escapeHtml(this.sourceTypeLabel(location.source_type))}
+                </span>
             </div>
             <div class="mobile-map-app__detail-copy">
                 <div class="mobile-map-app__detail-head">
                     <div>
                         <h3>${this.escapeHtml(location.location_name ?? 'Local sin nombre')}</h3>
-                        <p>${this.escapeHtml(this.cardSubtitle(location))}</p>
+                        <div class="mobile-map-app__detail-rating-row">
+                            <span class="mobile-map-app__detail-rating">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 17.1 6.8 19.8l1-5.8-4.2-4.1 5.8-.8L12 3.8Z" /></svg>
+                                ${this.escapeHtml(ratingLabel)}
+                            </span>
+                            <span>${this.escapeHtml(distanceLabel)}</span>
+                        </div>
                     </div>
                     <span class="mobile-map-app__detail-status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
                 </div>
-                ${categoryLabel ? `<div class="mobile-map-app__detail-category"><span style="background:${this.escapeHtml(categoryColor)};"></span>${this.escapeHtml(categoryLabel)}</div>` : ''}
+                ${categoryLabel ? `
+                    <div class="mobile-map-app__detail-category">
+                        <span style="background:${this.escapeHtml(categoryColor)};"></span>
+                        <div>
+                            <small>Categoría</small>
+                            <strong>${this.escapeHtml(categoryLabel)}</strong>
+                        </div>
+                    </div>
+                ` : ''}
                 <div class="mobile-map-app__detail-meta">
-                    <span>${this.escapeHtml(ratingLabel)}</span>
                     <span>${this.escapeHtml(location.short_address ?? 'Dirección pendiente')}</span>
                 </div>
                 ${this.locationIsJoyita(location) ? `<div class="mobile-map-app__detail-joyita">${this.escapeHtml(this.joyitaDetailLabel(location))}</div>` : ''}
                 ${hoursSummary ? `<p class="mobile-map-app__detail-note">${this.escapeHtml(hoursSummary)}</p>` : ''}
-                ${reviewSnippet ? `<blockquote class="mobile-map-app__detail-review">${this.escapeHtml(reviewSnippet)}</blockquote>` : ''}
-                <div class="mobile-map-app__detail-actions">
+                <section class="mobile-map-app__detail-section">
+                    <h4>Sobre nosotros</h4>
+                    <p>${this.escapeHtml(description)}</p>
+                </section>
+                ${galleryMarkup}
+                <div class="mobile-map-app__detail-actions mobile-map-app__detail-actions--primary">
+                    ${whatsappUrl ? `<a class="mobile-map-app__detail-action-primary" href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_whatsapp_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.6a8 8 0 0 1-11.8 7l-3.2.9.9-3.1A8 8 0 1 1 20 11.6Z" /><path d="M9.4 8.8c.2 2.7 2.2 4.7 4.9 5" /></svg>
+                        Pedir por WhatsApp
+                    </a>` : ''}
+                    ${profileUrl ? `<a class="mobile-map-app__detail-action-secondary" href="${this.escapeHtml(profileUrl)}">Ver perfil completo</a>` : '<button type="button" class="mobile-map-app__detail-action-secondary" disabled>Ver perfil completo</button>'}
+                </div>
+                <div class="mobile-map-app__detail-actions mobile-map-app__detail-actions--secondary">
                     ${directionsUrl ? `<a href="${this.escapeHtml(directionsUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_directions_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Cómo llegar</a>` : ''}
-                    ${whatsappUrl ? `<a href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_whatsapp_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">WhatsApp</a>` : ''}
                     ${claimUrl ? `<a href="${this.escapeHtml(claimUrl)}" data-action="click->map-shell#trackExternalAction" data-event-name="public_claim_started" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Reclamar</a>` : ''}
-                    ${canFavorite ? `<button type="button" class="${isFavorite ? 'is-active' : ''}" data-action="click->map-shell#toggleFavoriteFromSheet" data-location-id="${this.escapeHtml(String(location.location_id))}">${isFavorite ? 'Quitar favorito' : 'Guardar favorito'}</button>` : ''}
                 </div>
                 ${!canFavorite && location.source_type === 'google_places' ? '<p class="mobile-map-app__detail-policy">Los lugares de Google se pueden reclamar antes de guardarse como favorito en Mi Monchis.</p>' : ''}
             </div>

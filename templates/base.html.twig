@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="{% block html_class %}{% endblock %}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
         <meta name="theme-color" content="#F27F0D">
+        {% block meta %}{% endblock %}
         <title>{% block title %}Mi Monchis - Alpha{% endblock %}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,62 +25,74 @@
         <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
         {% endif %}
 
-        {% set ga_id = app.request.server.get('GOOGLE_ANALYTICS_ID') %}
-        {% if ga_id %}
+        {% set ga_id = app.request.server.get('GOOGLE_ANALYTICS_MEASUREMENT_ID') ?? app.request.server.get('GOOGLE_ANALYTICS_ID') %}
+        {% if app.environment == 'prod' and ga_id %}
             <script>
-                window.__miMonchisGoogleAnalyticsId = '{{ ga_id|e('js') }}';
-                window.__miMonchisLoadGoogleAnalytics = function () {
-                    if (!window.__miMonchisGoogleAnalyticsId || window.__miMonchisGoogleAnalyticsLoaded) {
-                        return;
-                    }
+                // 1. Setup inicial de Consent Mode (Todo bloqueado por defecto)
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('consent', 'default', {
+                    'analytics_storage': 'denied',
+                    'ad_storage': 'denied'
+                });
 
-                    window.__miMonchisGoogleAnalyticsLoaded = true;
-                    window.dataLayer = window.dataLayer || [];
-                    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
-                    window.gtag('js', new Date());
-                    window.gtag('config', window.__miMonchisGoogleAnalyticsId);
-
-                    const script = document.createElement('script');
-                    script.async = true;
-                    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(window.__miMonchisGoogleAnalyticsId);
-                    document.head.appendChild(script);
+                // 2. Revisión de consentimiento persistido en localStorage
+                (function() {
+                    try {
+                        var consentStr = window.localStorage.getItem('mi_monchis_cookie_consent');
+                        if (consentStr) {
+                            var consentObj = JSON.parse(consentStr);
+                            if (consentObj && consentObj.scope === 'all') {
+                                gtag('consent', 'update', {
+                                    'analytics_storage': 'granted',
+                                    'ad_storage': 'granted'
+                                });
+                            }
+                        }
+                    } catch(e) {}
+                })();
+            </script>
+            <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id|e('html_attr') }}"></script>
+            <script>
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '{{ ga_id|e('js') }}');
+                
+                // Exponer funcion para actualizar consentimiento en tiempo real
+                window.__miMonchisGrantConsent = function() {
+                    gtag('consent', 'update', {
+                        'analytics_storage': 'granted',
+                        'ad_storage': 'granted'
+                    });
                 };
-
-                try {
-                    const consent = JSON.parse(window.localStorage.getItem('mi_monchis_cookie_consent') || 'null');
-                    if (consent && (consent.scope === 'all' || consent.categories?.analytics === true)) {
-                        window.__miMonchisLoadGoogleAnalytics();
-                    }
-                } catch (error) {
-                    // La analítica opcional no debe bloquear la carga de la webapp.
-                }
-
-                window.addEventListener('mi-monchis:analytics-consent-granted', window.__miMonchisLoadGoogleAnalytics);
+                window.addEventListener('mi-monchis:analytics-consent-granted', window.__miMonchisGrantConsent);
             </script>
         {% endif %}
+
+        {% set adsense_enabled = app.request.server.get('GOOGLE_ADSENSE_ENABLED') %}
+        {% set adsense_id = app.request.server.get('GOOGLE_ADSENSE_CLIENT_ID') %}
+        {% if app.environment == 'prod' and adsense_enabled and adsense_id %}
+            <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_id|e('html_attr') }}" crossorigin="anonymous"></script>
+        {% endif %}
     </head>
-    <body>
+    <body class="{% block body_class %}{% endblock %}">
         {% block body %}{% endblock %}
         <aside class="cookie-consent is-hidden" data-controller="cookie-consent" aria-label="Consentimiento de cookies">
-            <div class="cookie-consent__panel">
-                <div>
+            <div class="cookie-consent__panel" data-cookie-consent-target="panel">
+                <div class="cookie-consent__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M19.5 12.4a7.5 7.5 0 1 1-7.9-7.9 3.2 3.2 0 0 0 3.9 3.9 3.3 3.3 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M8.5 10.5h.01M11.2 15.2h.01M14.5 12.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="cookie-consent__copy">
                     <strong>Tu privacidad en Mi Monchis</strong>
-                    <p>Usamos tecnologías esenciales para operar la webapp y opcionales para analítica. Puedes guardar tu preferencia o rechazar las no esenciales.</p>
-                    <div class="cookie-consent__options">
-                        <label>
-                            <input type="checkbox" checked disabled>
-                            <span>Esenciales</span>
-                        </label>
-                        <label>
-                            <input type="checkbox" data-cookie-consent-target="analyticsInput">
-                            <span>Analítica</span>
-                        </label>
-                    </div>
+                    <p>Usamos tecnologías esenciales para operar la webapp y opcionales para analítica. Puedes aceptar todas o rechazarlas no esenciales.</p>
                     <a href="{{ path('public_legal_show', { slug: 'cookies' }) }}">Ver política de cookies</a>
                 </div>
                 <div class="cookie-consent__actions">
                     <button type="button" data-action="cookie-consent#rejectOptional">Rechazar no esenciales</button>
-                    <button type="button" data-action="cookie-consent#savePreferences">Guardar preferencias</button>
                     <button type="button" data-action="cookie-consent#acceptAll">Aceptar todas</button>
                 </div>
             </div>

@@ -24,7 +24,7 @@
         <section
             class="mobile-map-app__shell"
             data-controller="map-shell"
-            data-action="click@window->map-shell#closeNotificationsOnOutsideClick click@window->map-shell#closeLocationSwitcherOnOutsideClick"
+            data-action="click@window->map-shell#closeNotificationsOnOutsideClick click@window->map-shell#closeLocationSwitcherOnOutsideClick keydown@window->map-shell#closeAuthModalOnEscape keydown@window->map-shell#closeMenuOnEscape"
             data-map-shell-feed-url-value="{{ path('public_api_map_feed') }}"
             data-map-shell-authenticated-value="{{ is_authenticated ? 'true' : 'false' }}"
             data-map-shell-favorites-url-value="{% if is_authenticated %}{{ path('public_api_favorites_collection') }}{% endif %}"
@@ -40,62 +40,110 @@
             {% if query_lng is not empty %}data-map-shell-lng-value="{{ query_lng }}"{% endif %}
         >
             <div class="welcome-flow is-hidden" data-map-shell-target="walkthrough">
-                <div class="welcome-flow__headline">
-                    <div class="welcome-flow__copy" data-map-shell-target="walkthroughCopy"></div>
-                    <div class="welcome-flow__cursor" data-map-shell-target="walkthroughCursor"></div>
-                </div>
-                <form class="welcome-flow__form is-hidden" data-map-shell-target="walkthroughForm" data-action="submit->map-shell#submitWalkthroughAddress">
-                    <label class="welcome-flow__label" for="walkthrough-address">Escribe tu direccion postal</label>
-                    <input
-                        id="walkthrough-address"
-                        class="welcome-flow__input"
-                        type="text"
-                        placeholder="Ej. Av. Henry Ford 120, Guadalupe Tepeyac"
-                        data-map-shell-target="walkthroughAddressInput"
-                        data-action="input->map-shell#searchWalkthroughAddress blur->map-shell#queueHideWalkthroughSuggestions"
-                        autocomplete="off"
-                    >
-                    <div class="welcome-flow__suggestions is-hidden" data-map-shell-target="walkthroughSuggestions"></div>
-                    <button type="submit" class="welcome-flow__submit">Usar esta direccion</button>
-                </form>
-                <button
-                    type="button"
-                    class="welcome-flow__geo is-hidden"
-                    data-map-shell-target="walkthroughGeoButton"
-                    data-action="map-shell#detectLocationFromWalkthrough"
-                >
-                    o haz clic aqui para obtener tu ubicacion
+                <button type="button" class="welcome-flow__back" data-action="map-shell#goBackFromWalkthrough" aria-label="Volver">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M19 12H5" />
+                        <path d="m12 5-7 7 7 7" />
+                    </svg>
                 </button>
-                <p class="welcome-flow__error is-hidden" data-map-shell-target="walkthroughError"></p>
-                <img
-                    src="{{ logo_url }}"
-                    alt="Mi Monchis"
-                    class="welcome-flow__logo is-hidden"
-                    data-map-shell-target="walkthroughLogo"
-                >
-                <div class="welcome-flow__legal">
+
+                <section class="welcome-flow__card" aria-labelledby="walkthrough-title">
+                    <img
+                        src="{{ asset('images/mi-monchis-horizontal.png') }}"
+                        alt="Mi Monchis MX"
+                        class="welcome-flow__logo is-hidden"
+                        data-map-shell-target="walkthroughLogo"
+                    >
+                    <div class="welcome-flow__headline">
+                        <h1 class="welcome-flow__copy" id="walkthrough-title" data-map-shell-target="walkthroughCopy"></h1>
+                        <div class="welcome-flow__cursor" data-map-shell-target="walkthroughCursor"></div>
+                    </div>
+                    <form class="welcome-flow__form is-hidden" data-map-shell-target="walkthroughForm" data-action="submit->map-shell#submitWalkthroughAddress">
+                        <label class="welcome-flow__label" for="walkthrough-address">Escribe tu direccion postal</label>
+                        <div class="welcome-flow__input-shell">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" class="welcome-flow__input-icon">
+                                <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Z" />
+                                <path d="M12 12.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
+                            </svg>
+                            <input
+                                id="walkthrough-address"
+                                class="welcome-flow__input"
+                                type="text"
+                                placeholder="Ej. Av. Henry Ford 120, Guadalupe Tepeyac"
+                                data-map-shell-target="walkthroughAddressInput"
+                                data-action="input->map-shell#searchWalkthroughAddress blur->map-shell#queueHideWalkthroughSuggestions"
+                                autocomplete="off"
+                            >
+                        </div>
+                        <div class="welcome-flow__suggestions is-hidden" data-map-shell-target="walkthroughSuggestions"></div>
+                        <button type="submit" class="welcome-flow__submit">
+                            <span>Explorar</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="11" cy="11" r="6" />
+                                <path d="m16 16 4 4" />
+                            </svg>
+                        </button>
+                    </form>
+                    <button
+                        type="button"
+                        class="welcome-flow__geo is-hidden"
+                        data-map-shell-target="walkthroughGeoButton"
+                        data-action="map-shell#detectLocationFromWalkthrough"
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 4v3" />
+                            <path d="M12 17v3" />
+                            <path d="M4 12h3" />
+                            <path d="M17 12h3" />
+                            <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+                        </svg>
+                        <span>o haz clic aqui para obtener tu ubicacion</span>
+                    </button>
+                    <p class="welcome-flow__error is-hidden" data-map-shell-target="walkthroughError"></p>
+                </section>
+
+                <footer class="welcome-flow__footer">
                     {% include 'public/_partials/legal_links.html.twig' %}
-                </div>
+                    <p>© 2026 Mi Monchis. Hecho con antojo.</p>
+                </footer>
             </div>
 
             <header class="mobile-map-app__header">
                 <div class="mobile-map-app__header-top">
-                    <button type="button" class="mobile-map-app__icon-button mobile-map-app__icon-button--menu" aria-label="Menú">
+                    <button type="button" class="mobile-map-app__icon-button mobile-map-app__icon-button--menu" aria-label="Menú" data-map-shell-target="menuButton" data-action="map-shell#toggleMenu">
                         <svg viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
                             <path d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
                     
                     <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis MX" class="mobile-map-app__brand-logo">
+
+                    <form class="mobile-map-app__desktop-search is-desktop-only" data-action="submit->map-shell#submitDesktopSearch">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="11" cy="11" r="6" />
+                            <path d="m16 16 4 4" />
+                        </svg>
+                        <label for="desktop-location-search">Buscar locales</label>
+                        <input
+                            id="desktop-location-search"
+                            type="search"
+                            placeholder="Busca tacos, hamburguesas o el puesto de la esquina..."
+                            data-map-shell-target="desktopSearchInput"
+                            data-action="input->map-shell#filterByDesktopSearch"
+                            autocomplete="off"
+                        >
+                        <button type="submit">Buscar</button>
+                    </form>
                     
                     <div class="mobile-map-app__header-actions">
-                        <strong class="mobile-map-app__desktop-explore-title">Explorar</strong>
-
                         <div class="mobile-map-app__location-display is-desktop-only" data-map-shell-target="switcherToggle" data-switcher-mode="locations" data-action="click->map-shell#toggleLocationSwitcher" style="cursor: pointer;">
                             <svg class="mobile-map-app__pin-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                             </svg>
                             <span class="mobile-map-app__location-label" data-map-shell-target="heroLocationDesktop">{{ hero_location_label }}</span>
+                            <svg class="mobile-map-app__service-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
                         </div>
                         
                         <div class="mobile-map-app__service-dropdown-container is-desktop-only">
@@ -136,6 +184,9 @@
                             <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" />
                         </svg>
                         <span class="mobile-map-app__location-label" data-map-shell-target="heroLocation">{{ hero_location_label }}</span>
+                        <svg class="mobile-map-app__service-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
                     </div>
                     
                     <button
@@ -153,11 +204,61 @@
                         <span data-map-shell-target="serviceFilterLabel">Todo</span>
                     </button>
                 </div>
-                
+
                 <div class="mobile-map-app__location-switcher is-hidden" data-map-shell-target="locationSwitcher">
                     {# El contenido se renderiza dinámicamente desde el controlador Stimulus #}
                 </div>
             </header>
+
+            <aside class="mobile-map-app__menu is-hidden" data-map-shell-target="menuPanel" aria-label="Menú principal">
+                <div class="mobile-map-app__menu-backdrop" data-action="click->map-shell#closeMenu"></div>
+                <section class="mobile-map-app__menu-panel">
+                    <header class="mobile-map-app__menu-head">
+                        <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis MX">
+                        <button type="button" class="mobile-map-app__menu-close" data-action="map-shell#closeMenu" aria-label="Cerrar menú">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M6 6 18 18" />
+                                <path d="M18 6 6 18" />
+                            </svg>
+                        </button>
+                    </header>
+                    <form class="mobile-map-app__menu-search" data-action="submit->map-shell#submitDesktopSearch">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="11" cy="11" r="6" />
+                            <path d="m16 16 4 4" />
+                        </svg>
+                        <label for="mobile-location-search">Busca tu antojo</label>
+                        <input
+                            id="mobile-location-search"
+                            type="search"
+                            placeholder="Busca tacos, tortas, café..."
+                            data-map-shell-target="mobileSearchInput"
+                            data-action="input->map-shell#filterByDesktopSearch"
+                            autocomplete="off"
+                        >
+                    </form>
+                    <div class="mobile-map-app__menu-group mobile-map-app__menu-group--filters">
+                        <p>Fuentes</p>
+                        <div class="mobile-map-app__menu-source" data-map-shell-target="menuSourceFilterRow"></div>
+                    </div>
+                    <div class="mobile-map-app__menu-group mobile-map-app__menu-group--filters">
+                        <p>Categorías</p>
+                        <div class="mobile-map-app__menu-categories" data-map-shell-target="menuCategoryList"></div>
+                    </div>
+                    <div class="mobile-map-app__menu-group">
+                        <p>Para locales</p>
+                        <a href="{{ path('public_claim_location') }}">Reclamar o registrar mi local</a>
+                    </div>
+                    <div class="mobile-map-app__menu-actions">
+                        {% if is_authenticated %}
+                            <a href="{{ logout_path('main') }}">Cerrar sesión</a>
+                        {% else %}
+                            <a href="{{ path('public_login') }}">Iniciar sesión</a>
+                            <a href="{{ path('public_register') }}">Crear cuenta</a>
+                        {% endif %}
+                    </div>
+                </section>
+            </aside>
 
             <section class="mobile-map-app__explore-shell" data-map-shell-target="exploreSection">
                 <div class="mobile-map-app__map-stage" data-map-shell-target="mapStage">
@@ -402,14 +503,95 @@
             <aside class="mobile-map-app__detail-sheet is-hidden" data-map-shell-target="detailSheet">
                 <div class="mobile-map-app__detail-backdrop" data-action="click->map-shell#closeDetailSheet"></div>
                 <div class="mobile-map-app__detail-card">
-                    <button type="button" class="mobile-map-app__detail-close" data-action="map-shell#closeDetailSheet" aria-label="Cerrar detalle">
+                    <div class="mobile-map-app__detail-body" data-map-shell-target="detailSheetBody"></div>
+                </div>
+            </aside>
+
+            <aside class="mobile-map-app__auth-modal is-hidden" data-map-shell-target="authModal" aria-modal="true" role="dialog" aria-labelledby="auth-modal-title">
+                <div class="mobile-map-app__auth-modal-backdrop" data-action="click->map-shell#closeAuthModal"></div>
+                <section class="mobile-map-app__auth-modal-card">
+                    <div class="mobile-map-app__auth-modal-grabber" aria-hidden="true"></div>
+                    <button type="button" class="mobile-map-app__auth-modal-close" data-action="map-shell#closeAuthModal" aria-label="Cerrar">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M6 6 18 18" />
                             <path d="M18 6 6 18" />
                         </svg>
                     </button>
-                    <div class="mobile-map-app__detail-body" data-map-shell-target="detailSheetBody"></div>
-                </div>
+
+                    <header class="mobile-map-app__auth-modal-head">
+                        <h2 id="auth-modal-title" data-map-shell-target="authModalTitle">Mi Monchis</h2>
+                        <p data-map-shell-target="authModalCopy">Descubre el sabor de tu barrio.</p>
+                    </header>
+
+                    <div class="mobile-map-app__auth-socials">
+                        <a href="{{ path('connect_google_start') }}" class="mobile-map-app__auth-social mobile-map-app__auth-social--google">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            <span>Continuar con Google</span>
+                        </a>
+                        <div class="mobile-map-app__auth-social-grid">
+                            <button type="button" class="mobile-map-app__auth-social" disabled>
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6.02 4.39 11.01 10.13 11.93v-8.44H7.08v-3.49h3.04V9.41c0-3.03 1.79-4.7 4.53-4.7 1.31 0 2.69.24 2.69.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.08 24 18.09 24 12.07Z"/>
+                                </svg>
+                                <span>Facebook</span>
+                            </button>
+                            <button type="button" class="mobile-map-app__auth-social mobile-map-app__auth-social--apple" disabled>
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M16.5 12.2c0-2.4 2-3.5 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.6.9-.8 0-1.9-.9-3.1-.8-1.6 0-3.1 1-3.9 2.4-1.7 3-.4 7.5 1.2 9.9.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8 2.2-1.2 3-2.4c1-1.4 1.4-2.7 1.4-2.8 0 0-2.6-1-2.6-4.1ZM14.1 5.1c.7-.8 1.1-2 1-3.1-1 .1-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4Z"/>
+                                </svg>
+                                <span>Apple ID</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mobile-map-app__auth-divider">
+                        <span></span>
+                        <strong>O CON EMAIL</strong>
+                        <span></span>
+                    </div>
+
+                    <form method="post" action="{{ path('public_login') }}" class="mobile-map-app__auth-form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                        <input type="hidden" name="_target_path" value="{{ path('public_home') }}">
+                        <label>
+                            <span>Email o Teléfono</span>
+                            <div class="mobile-map-app__auth-input">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 6h16v12H4z" />
+                                    <path d="m4 7 8 6 8-6" />
+                                </svg>
+                                <input type="email" name="_username" placeholder="nombre@ejemplo.com" autocomplete="email" required>
+                            </div>
+                        </label>
+                        <label>
+                            <span>Contraseña</span>
+                            <div class="mobile-map-app__auth-input">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <rect x="5" y="10" width="14" height="10" rx="2" />
+                                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                                </svg>
+                                <input type="password" name="_password" placeholder="••••••••" autocomplete="current-password" data-map-shell-target="authPasswordInput" required>
+                                <button type="button" data-action="map-shell#toggleAuthPasswordVisibility" aria-label="Mostrar contraseña">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </label>
+                        <button type="submit" class="mobile-map-app__auth-submit">Iniciar Sesión</button>
+                    </form>
+
+                    <footer class="mobile-map-app__auth-modal-foot">
+                        <a href="{{ path('public_login') }}">¿Olvidaste tu contraseña?</a>
+                        <p>¿No tienes una cuenta? <a href="{{ path('public_register') }}">Regístrate</a></p>
+                    </footer>
+                </section>
             </aside>
 
             <nav class="mobile-map-app__nav">
@@ -459,6 +641,11 @@
                     <span>Perfil</span>
                 </button>
             </nav>
+
+            <footer class="mobile-map-app__footer">
+                <p>© 2026 Mi Monchis. Hecho con antojo.</p>
+                {% include 'public/_partials/legal_links.html.twig' %}
+            </footer>
         </section>
     </main>
 {% endblock %}

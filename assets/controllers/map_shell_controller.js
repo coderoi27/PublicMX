@@ -105,6 +105,12 @@ export default class extends Controller {
             focusedZoom: 18,
             streetLabelWeight: 'normal',
         };
+        this.googlePlacesSettings = {
+            include_photos: true,
+            include_ratings: true,
+            include_opening_hours: true,
+            include_service_attributes: true,
+        };
         this.selectedLocationId = null;
         this.activeCategoryFilter = 'all';
         this.joyitasOnly = false;
@@ -467,6 +473,7 @@ export default class extends Controller {
         this.locationSwitcherOpen = false;
         this.renderLocationSwitcherState();
         this.renderServiceFilterSummary();
+        this.renderCategoryChips(this.currentLocations);
 
         this.visibleLocations = this.filteredLocations(this.currentLocations);
         const selectedStillVisible = this.visibleLocations.find((location) => this.locationKey(location) === this.selectedLocationId);
@@ -774,6 +781,7 @@ export default class extends Controller {
             const payload = await response.json();
             this.registerCategoryCatalog(payload.meta?.category_catalog ?? []);
             this.registerMapSettings(payload.meta?.settings?.map ?? {});
+            this.registerGooglePlacesSettings(payload.meta?.settings?.google_places_proxy ?? {});
             this.googlePlacesProxyEnabled = payload.meta?.plugins?.google_places_proxy === true;
             const canonicalLocations = Array.isArray(payload.data) ? payload.data : [];
             let locations = canonicalLocations;
@@ -855,6 +863,7 @@ export default class extends Controller {
     }
 
     async applyVisibleFilters(emptyMessage = 'No encontré locales con esos filtros.') {
+        this.renderCategoryChips(this.currentLocations);
         this.visibleLocations = this.filteredLocations(this.currentLocations);
         const selectedStillVisible = this.visibleLocations.find((location) => this.locationKey(location) === this.selectedLocationId);
         if (!selectedStillVisible) {
@@ -931,8 +940,22 @@ export default class extends Controller {
 
     exploreVisualMarkup(locations, cardsMarkup) {
         const nearbyLocations = locations.slice(0, 6);
+        const categoryContextLocations = this.categoryCardContextLocations(this.currentLocations);
+        const placesStoryItems = this.placesStoryItems(locations);
 
         return `
+            ${placesStoryItems.length > 0 ? `
+            <section class="mobile-map-app__visual-section">
+                <div class="mobile-map-app__visual-head">
+                    <h3>Historias cerca</h3>
+                    <button type="button" data-category-filter="__source:google" data-action="map-shell#applyCategoryFilter">Ver Places</button>
+                </div>
+                <div class="mobile-map-app__places-story-row">
+                    ${this.placesStoriesMarkup(placesStoryItems)}
+                </div>
+            </section>
+            ` : ''}
+
             <section class="mobile-map-app__visual-section">
                 <div class="mobile-map-app__visual-head">
                     <h3>Nearby Live</h3>
@@ -957,11 +980,11 @@ export default class extends Controller {
 
             <section class="mobile-map-app__visual-section">
                 <div class="mobile-map-app__visual-head">
-                    <h3>Explora por categorías</h3>
+                    <h3>Categorías cercanas</h3>
                     <button type="button" data-category-filter="all" data-action="map-shell#applyCategoryFilter">Ver todo</button>
                 </div>
-                <div class="mobile-map-app__category-orbit">
-                    ${this.categoryVisualPillsMarkup(locations)}
+                <div class="mobile-map-app__nearby-category-grid">
+                    ${this.nearbyCategoryCardsMarkup(categoryContextLocations)}
                 </div>
             </section>
 
@@ -987,6 +1010,58 @@ export default class extends Controller {
         `;
     }
 
+    placesStoryItems(locations) {
+        if (!this.googlePlacesStoriesEnabled()) {
+            return [];
+        }
+
+        return locations
+            .filter((location) => location.source_type === 'google_places' && location.photo_url)
+            .slice(0, 10)
+            .map((location) => ({
+                id: location.external_source_key ?? location.place_id ?? this.locationKey(location),
+                locationKey: this.locationKey(location),
+                title: location.location_name ?? location.merchant_name ?? 'Place cercano',
+                photoUrl: location.photo_url,
+                categoryLabel: this.locationCategoryKey(location) !== 'all'
+                    ? this.categoryDisplayName(this.locationCategoryKey(location))
+                    : 'Place',
+                ratingLabel: this.placesStoryRatingLabel(location),
+                distanceLabel: this.formatDistance(location.distance_meters) || 'Cerca',
+            }));
+    }
+
+    placesStoriesMarkup(items) {
+        return items.map((item) => `
+            <button
+                type="button"
+                class="mobile-map-app__places-story"
+                style="background-image:linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.68)), url('${this.escapeHtml(item.photoUrl)}');"
+                data-action="click->map-shell#openVisualLocation"
+                data-location-key="${this.escapeHtml(item.locationKey)}"
+            >
+                <span>${this.escapeHtml(item.categoryLabel)}</span>
+                <strong>${this.escapeHtml(this.shortLocationName({ location_name: item.title }))}</strong>
+                <small>${this.escapeHtml([item.ratingLabel ? `★ ${item.ratingLabel}` : '', item.distanceLabel].filter(Boolean).join(' · '))}</small>
+            </button>
+        `).join('');
+    }
+
+    googlePlacesStoriesEnabled() {
+        return this.hasUserCoordinates()
+            && this.googlePlacesProxyEnabled === true
+            && this.enabledSetting(this.googlePlacesSettings.include_photos, true);
+    }
+
+    placesStoryRatingLabel(location) {
+        if (!this.enabledSetting(this.googlePlacesSettings.include_ratings, true)) {
+            return '';
+        }
+
+        const rating = Number(location.rating ?? location.meta?.rating);
+        return Number.isFinite(rating) ? rating.toFixed(1) : '';
+    }
+
     categoryVisualPillsMarkup(locations) {
         const categoryKeys = this.availableCategoryKeys(locations).slice(0, 7);
         return categoryKeys.map((categoryKey) => {
@@ -1005,6 +1080,98 @@ export default class extends Controller {
                 </button>
             `;
         }).join('');
+    }
+
+    nearbyCategoryCardsMarkup(locations) {
+        if (!this.hasUserCoordinates()) {
+            return this.nearbyCategoryEmptyMarkup(
+                'Elige una ubi para ver categorías cercanas',
+                'Las categorías se arman con los locales encontrados alrededor de tu zona.'
+            );
+        }
+
+        const summaries = this.nearbyCategorySummaries(locations);
+        if (summaries.length === 0) {
+            return this.nearbyCategoryEmptyMarkup(
+                'Sin categorías suficientes',
+                'Prueba otra fuente, cambia el servicio o mueve el mapa para descubrir más opciones.'
+            );
+        }
+
+        return summaries.slice(0, 8).map((summary) => {
+            const style = summary.photoUrl
+                ? `style="--nearby-category-color:${this.escapeHtml(summary.colorHex)}; background-image:linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.68)), url('${this.escapeHtml(summary.photoUrl)}');"`
+                : `style="--nearby-category-color:${this.escapeHtml(summary.colorHex)};"`;
+
+            return `
+                <button
+                    type="button"
+                    class="mobile-map-app__nearby-category-card ${summary.photoUrl ? 'has-photo' : ''} ${this.activeCategoryFilter === summary.slug ? 'is-active' : ''}"
+                    ${style}
+                    data-category-filter="${this.escapeHtml(summary.slug)}"
+                    data-action="map-shell#applyCategoryFilter"
+                >
+                    <span class="mobile-map-app__nearby-category-icon">${this.categoryIconSvg(summary.slug)}</span>
+                    <span class="mobile-map-app__nearby-category-meta">${this.escapeHtml(summary.countLabel)}</span>
+                    <strong>${this.escapeHtml(summary.label)}</strong>
+                    <small>${this.escapeHtml(summary.copy)}</small>
+                </button>
+            `;
+        }).join('');
+    }
+
+    nearbyCategoryEmptyMarkup(title, copy) {
+        return `
+            <article class="mobile-map-app__nearby-category-empty">
+                <strong>${this.escapeHtml(title)}</strong>
+                <p>${this.escapeHtml(copy)}</p>
+            </article>
+        `;
+    }
+
+    nearbyCategorySummaries(locations) {
+        const groups = new Map();
+
+        locations.forEach((location) => {
+            const slug = this.locationCategoryKey(location);
+            if (slug === 'all') {
+                return;
+            }
+
+            if (!groups.has(slug)) {
+                groups.set(slug, []);
+            }
+            groups.get(slug).push(location);
+        });
+
+        return [...groups.entries()]
+            .map(([slug, groupLocations]) => {
+                const sourceGroups = new Set(groupLocations.map((location) => this.locationSourceGroup(location)));
+                const catalogIndex = this.categoryCatalog.findIndex((category) => String(category.slug) === slug);
+                const serviceLabel = this.activeServiceFilter === 'all'
+                    ? 'opciones cerca'
+                    : this.serviceFilterDisplayName(this.activeServiceFilter).toLowerCase();
+
+                return {
+                    slug,
+                    catalogIndex: catalogIndex === -1 ? Number.MAX_SAFE_INTEGER : catalogIndex,
+                    label: this.categoryDisplayName(slug),
+                    colorHex: this.categoryColor(slug),
+                    photoUrl: this.categoryVisualPhotoUrl(slug, groupLocations),
+                    count: groupLocations.length,
+                    countLabel: `${groupLocations.length} ${groupLocations.length === 1 ? 'lugar' : 'lugares'}`,
+                    copy: sourceGroups.size > 1
+                        ? `${serviceLabel} de Mi Monchis y Places`
+                        : `${serviceLabel} en ${sourceGroups.has('google') ? 'Places' : 'Mi Monchis'}`,
+                };
+            })
+            .sort((left, right) => {
+                if (left.catalogIndex !== right.catalogIndex) {
+                    return left.catalogIndex - right.catalogIndex;
+                }
+
+                return right.count - left.count || left.label.localeCompare(right.label, 'es');
+            });
     }
 
     communityReviewTeasersMarkup(locations) {
@@ -1254,6 +1421,10 @@ export default class extends Controller {
 
             return matchesJoyita && matchesSource && matchesService;
         });
+    }
+
+    categoryCardContextLocations(locations) {
+        return this.categoryChipContextLocations(locations).filter((location) => this.locationMatchesSearch(location));
     }
 
     availableCategoryKeys(locations) {
@@ -2490,6 +2661,31 @@ export default class extends Controller {
         };
     }
 
+    registerGooglePlacesSettings(settings) {
+        this.googlePlacesSettings = {
+            include_photos: this.enabledSetting(settings?.include_photos, this.googlePlacesSettings.include_photos),
+            include_ratings: this.enabledSetting(settings?.include_ratings, this.googlePlacesSettings.include_ratings),
+            include_opening_hours: this.enabledSetting(settings?.include_opening_hours, this.googlePlacesSettings.include_opening_hours),
+            include_service_attributes: this.enabledSetting(settings?.include_service_attributes, this.googlePlacesSettings.include_service_attributes),
+        };
+    }
+
+    enabledSetting(value, fallback = true) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+
+        if (typeof value === 'number') {
+            return value === 1;
+        }
+
+        if (typeof value === 'string') {
+            return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+        }
+
+        return fallback;
+    }
+
     defaultMapZoom() {
         return this.mapSettings.defaultZoom;
     }
@@ -2533,6 +2729,8 @@ export default class extends Controller {
                 label: String(catalogCategory.name ?? this.labelFromSlug(String(categoryKey))),
                 colorHex: String(catalogCategory.color_hex ?? '#CBD5E1'),
                 iconKey: String(catalogCategory.icon_key ?? ''),
+                defaultPhotoUrl: catalogCategory.default_photo_url ? String(catalogCategory.default_photo_url) : '',
+                coverPhotoUrl: catalogCategory.cover_photo_url ? String(catalogCategory.cover_photo_url) : '',
             };
         }
 
@@ -2545,7 +2743,19 @@ export default class extends Controller {
             label: this.labelFromSlug(String(categoryKey)),
             colorHex: '#CBD5E1',
             iconKey: '',
+            defaultPhotoUrl: '',
+            coverPhotoUrl: '',
         };
+    }
+
+    categoryVisualPhotoUrl(categoryKey, locations = []) {
+        const categoryInfo = this.categoryInfo(categoryKey);
+        const representativeLocation = locations.find((location) => this.locationVisualPhotoUrl(location));
+
+        return categoryInfo.coverPhotoUrl
+            || categoryInfo.defaultPhotoUrl
+            || this.locationVisualPhotoUrl(representativeLocation ?? {})
+            || null;
     }
 
     inferCatalogCategoryFromTypes(types) {

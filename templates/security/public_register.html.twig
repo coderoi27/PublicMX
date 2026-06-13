@@ -1,49 +1,629 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Crear cuenta{% endblock %}
+{% block title %}Registro - Mi Monchis{% endblock %}
+
+{% block body_class %}register-flow-page{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        .register-flow-page {
+            min-height: 100dvh;
+            margin: 0;
+            background:
+                radial-gradient(circle at 12% 18%, rgba(249, 130, 5, 0.08), transparent 18rem),
+                radial-gradient(circle at 86% 28%, rgba(0, 166, 249, 0.06), transparent 16rem),
+                #fff8f5;
+            color: #241912;
+            font-family: "Outfit", system-ui, sans-serif;
+        }
+
+        .register-flow-page .cookie-consent {
+            display: none !important;
+        }
+
+        .register-flow {
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            padding: max(1rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+        }
+
+        .register-flow__topbar {
+            min-height: 3rem;
+            display: grid;
+            grid-template-columns: 2.5rem 1fr 2.5rem;
+            align-items: center;
+            width: min(100%, 72rem);
+            margin: 0 auto;
+        }
+
+        .register-flow__back {
+            width: 2.4rem;
+            height: 2.4rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: #944a00;
+            text-decoration: none;
+        }
+
+        .register-flow__back svg,
+        .register-flow__input-icon,
+        .register-flow__password-toggle svg {
+            width: 1.2rem;
+            height: 1.2rem;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .register-flow__brand {
+            justify-self: center;
+            height: 1.85rem;
+            width: auto;
+        }
+
+        .register-flow__shell {
+            width: min(100%, 28rem);
+            margin: 1rem auto 0;
+            display: grid;
+            gap: 1.3rem;
+        }
+
+        .register-flow__progress {
+            display: grid;
+            gap: 0.58rem;
+        }
+
+        .register-flow__progress-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            color: #944a00;
+            font-size: 0.78rem;
+            font-weight: 900;
+        }
+
+        .register-flow__segments {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.45rem;
+        }
+
+        .register-flow__segment {
+            height: 0.24rem;
+            border-radius: 999px;
+            background: #ffeade;
+        }
+
+        .register-flow__segment.is-active {
+            background: #944a00;
+        }
+
+        .register-flow__hero {
+            justify-self: center;
+            width: 9rem;
+            height: 9rem;
+            position: relative;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: linear-gradient(145deg, #ffb783, #f27f0d);
+            box-shadow: 0 22px 42px rgba(148, 74, 0, 0.16);
+        }
+
+        .register-flow__phone {
+            width: 4.25rem;
+            height: 6.9rem;
+            display: grid;
+            place-items: center;
+            border: 4px solid #564335;
+            border-radius: 1.05rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 42%),
+                linear-gradient(145deg, #fff1e9, #ffd7bd);
+            box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.48);
+            overflow: hidden;
+        }
+
+        .register-flow__phone img {
+            width: 3.2rem;
+            height: auto;
+        }
+
+        .register-flow__welcome {
+            position: absolute;
+            bottom: 1rem;
+            border-radius: 999px;
+            padding: 0.26rem 0.5rem;
+            background: #f27f0d;
+            color: #fff;
+            font-size: 0.58rem;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .register-flow__copy h1 {
+            margin: 0 0 0.55rem;
+            color: #241912;
+            font-size: clamp(1.55rem, 5vw, 1.9rem);
+            line-height: 1.05;
+            letter-spacing: 0;
+        }
+
+        .register-flow__copy p {
+            margin: 0;
+            color: #564335;
+            font-size: 0.98rem;
+            line-height: 1.45;
+        }
+
+        .register-flow__error {
+            border: 1px solid #f4b4af;
+            border-radius: 18px;
+            padding: 0.85rem 1rem;
+            background: #ffdad6;
+            color: #93000a;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .register-flow__form {
+            display: grid;
+            gap: 1.05rem;
+        }
+
+        .register-flow__step {
+            display: none;
+            gap: 0.9rem;
+        }
+
+        .register-flow__step.is-active {
+            display: grid;
+        }
+
+        .register-flow__field {
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .register-flow__field label,
+        .register-flow__legal strong {
+            color: #564335;
+            font-size: 0.76rem;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+        }
+
+        .register-flow__input-shell {
+            min-height: 3.45rem;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 0.7rem;
+            border: 1px solid #ddc1af;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.82);
+            padding: 0 0.9rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        .register-flow__input-shell:focus-within {
+            border-color: #944a00;
+            box-shadow: 0 0 0 4px rgba(148, 74, 0, 0.08);
+        }
+
+        .register-flow__input-shell input {
+            width: 100%;
+            min-width: 0;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: #241912;
+            font: inherit;
+            font-size: 0.98rem;
+        }
+
+        .register-flow__input-shell input::placeholder {
+            color: #8a7263;
+            opacity: 0.78;
+        }
+
+        .register-flow__input-icon,
+        .register-flow__password-toggle {
+            color: #8a7263;
+        }
+
+        .register-flow__password-toggle {
+            border: none;
+            background: transparent;
+            padding: 0;
+        }
+
+        .register-flow__legal {
+            display: grid;
+            gap: 0.7rem;
+            border: 1px solid rgba(221, 193, 175, 0.58);
+            border-radius: 18px;
+            padding: 1rem;
+            background: rgba(255, 241, 233, 0.74);
+        }
+
+        .register-flow__check {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.7rem;
+            align-items: start;
+            color: #564335;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .register-flow__check input {
+            width: 1.05rem;
+            height: 1.05rem;
+            margin-top: 0.2rem;
+            accent-color: #f27f0d;
+        }
+
+        .register-flow a {
+            color: #944a00;
+            font-weight: 900;
+        }
+
+        .register-flow__actions {
+            display: grid;
+            gap: 0.75rem;
+            margin-top: 0.35rem;
+        }
+
+        .register-flow__primary,
+        .register-flow__secondary,
+        .register-flow__google {
+            min-height: 3.25rem;
+            border-radius: 999px;
+            padding: 0.78rem 1rem;
+            font-weight: 900;
+            font-size: 1rem;
+            text-decoration: none;
+        }
+
+        .register-flow__primary {
+            border: none;
+            background: #f98205;
+            color: #fff8f5;
+            box-shadow: 0 18px 34px rgba(249, 130, 5, 0.24);
+        }
+
+        .register-flow__secondary,
+        .register-flow__google {
+            border: 1px solid #ddc1af;
+            background: rgba(255, 255, 255, 0.72);
+            color: #944a00;
+        }
+
+        .register-flow__secondary {
+            display: none;
+        }
+
+        .register-flow__actions.has-previous .register-flow__secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .register-flow__signin,
+        .register-flow__google-row {
+            text-align: center;
+            color: #564335;
+            font-size: 0.82rem;
+        }
+
+        .register-flow__google-row {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .register-flow__google-row span {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 0.65rem;
+            color: #8a7263;
+            font-size: 0.72rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .register-flow__google-row span::before,
+        .register-flow__google-row span::after {
+            content: "";
+            height: 1px;
+            background: #ddc1af;
+        }
+
+        .register-flow__google {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+        }
+
+        .register-flow__google svg {
+            width: 1.2rem;
+            height: 1.2rem;
+        }
+
+        .register-flow__method-choice {
+            display: grid;
+            gap: 0.8rem;
+        }
+
+        .register-flow__method-card {
+            min-height: 4rem;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 0.85rem;
+            border: 1px solid #ddc1af;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.78);
+            color: #241912;
+            padding: 0.9rem 1rem;
+            text-align: left;
+            text-decoration: none;
+            box-shadow: 0 12px 28px rgba(148, 74, 0, 0.08);
+            cursor: pointer;
+        }
+
+        .register-flow__method-card svg {
+            width: 1.35rem;
+            height: 1.35rem;
+        }
+
+        .register-flow__method-card strong {
+            display: block;
+            color: #241912;
+            font-size: 0.98rem;
+        }
+
+        .register-flow__method-card span {
+            color: #6d5849;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .register-flow__method-card--primary {
+            border-color: transparent;
+            background: #f98205;
+            color: #fff8f5;
+        }
+
+        .register-flow__method-card--primary strong,
+        .register-flow__method-card--primary span {
+            color: #fff8f5;
+        }
+
+        .register-flow:not(.is-form-active) .register-flow__progress,
+        .register-flow:not(.is-form-active) .register-flow__form {
+            display: none;
+        }
+
+        .register-flow.is-form-active .register-flow__method-choice {
+            display: none;
+        }
+
+        @media (min-width: 860px) {
+            .register-flow {
+                padding-inline: 2.5rem;
+            }
+
+            .register-flow__shell {
+                width: min(100%, 24.5rem);
+                margin-top: 0.8rem;
+            }
+
+            .register-flow__hero {
+                width: 10.5rem;
+                height: 10.5rem;
+            }
+
+            .register-flow__copy h1 {
+                font-size: 1.85rem;
+            }
+        }
+
+        @media (max-width: 430px) {
+            .register-flow {
+                padding-inline: 1rem;
+            }
+
+            .register-flow__brand {
+                height: 1.55rem;
+            }
+
+            .register-flow__shell {
+                margin-top: 0.65rem;
+                gap: 1rem;
+            }
+
+            .register-flow__hero {
+                width: 8.25rem;
+                height: 8.25rem;
+            }
+
+            .register-flow__phone {
+                width: 3.8rem;
+                height: 6.15rem;
+            }
+        }
+    </style>
+{% endblock %}
 
 {% block body %}
-    <main style="min-height: 100vh; display: grid; place-items: center; background: linear-gradient(180deg, #f9fafb 0%, #eef2f7 100%); padding: 1.5rem;">
-        <section style="width: 100%; max-width: 480px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 20px; padding: 2rem;">
-            <h1 style="margin: 0 0 1rem;">Crear cuenta</h1>
-            {% if error is defined %}
-                <div style="margin-bottom: 1rem; border-radius: 12px; background: #fef2f2; color: #991b1b; padding: 0.9rem 1rem;">
-                    {{ error }}
+    <main class="register-flow {{ show_form|default(false) ? 'is-form-active' : '' }}" data-controller="register-flow">
+        <header class="register-flow__topbar">
+            <a class="register-flow__back" href="{{ path('public_home') }}" aria-label="Volver a explorar">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M19 12H5"></path>
+                    <path d="m12 5-7 7 7 7"></path>
+                </svg>
+            </a>
+            <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis" class="register-flow__brand">
+            <span aria-hidden="true"></span>
+        </header>
+
+        <section class="register-flow__shell" aria-labelledby="register-title">
+            <div class="register-flow__progress" aria-label="Progreso de registro">
+                <div class="register-flow__progress-meta">
+                    <span data-register-flow-target="counter">Paso 1 de 3</span>
+                    <span data-register-flow-target="title">Tu información</span>
                 </div>
-            {% endif %}
-            <form method="post">
-                <input type="text" name="first_name" required placeholder="Nombre" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
-                <input type="text" name="last_name" required placeholder="Apellido" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
-                <input type="email" name="email" required placeholder="Email" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
-                <input type="password" name="password" required placeholder="Password" style="width: 100%; margin-bottom: 1rem; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem;">
-                <input type="hidden" name="registration_origin" value="organic">
-                <label style="display:flex; gap:0.65rem; align-items:flex-start; margin:0 0 1rem; color:#374151; font-size:0.9rem; line-height:1.45;">
-                    <input type="checkbox" name="legal_terms" value="1" required style="margin-top:0.2rem;">
-                    <span>
-                        Acepto los
-                        <a href="{{ path('public_legal_show', { slug: 'terminos-publico' }) }}" target="_blank" rel="noreferrer" style="color:#f97316; font-weight:700;">términos vigentes</a>
-                        y el
-                        <a href="{{ path('public_legal_show', { slug: 'aviso-privacidad' }) }}" target="_blank" rel="noreferrer" style="color:#f97316; font-weight:700;">aviso de privacidad</a>.
-                    </span>
-                </label>
-                <button type="submit" style="width: 100%; border: none; border-radius: 12px; background: #111827; color: #ffffff; padding: 0.9rem 1rem; font-weight: 700;">Continuar</button>
-            </form>
-            
-            <div style="margin: 1.5rem 0; text-align: center; color: #6b7280; font-size: 0.875rem; display: flex; align-items: center;">
-                <hr style="flex-grow: 1; border: none; border-top: 1px solid #e5e7eb;">
-                <span style="padding: 0 0.75rem;">O</span>
-                <hr style="flex-grow: 1; border: none; border-top: 1px solid #e5e7eb;">
+                <div class="register-flow__segments">
+                    <span class="register-flow__segment is-active" data-register-flow-target="segment"></span>
+                    <span class="register-flow__segment" data-register-flow-target="segment"></span>
+                    <span class="register-flow__segment" data-register-flow-target="segment"></span>
+                </div>
             </div>
 
-            <a href="{{ path('connect_google_start') }}" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; background: #ffffff; border: 1px solid #d1d5db; border-radius: 12px; padding: 0.85rem 1rem; color: #374151; font-weight: 600; text-decoration: none;">
-                <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-                Continuar con Google
-            </a>
+            <div class="register-flow__hero" aria-hidden="true">
+                <div class="register-flow__phone">
+                    <img src="{{ asset('images/mi-monchis-cuadrado.png') }}" alt="">
+                </div>
+                <span class="register-flow__welcome">Bienvenido</span>
+            </div>
+
+            <div class="register-flow__copy">
+                <h1 id="register-title">Únete a la comunidad del antojo</h1>
+                <p>Queremos conocerte para ofrecerte los mejores monchis de la ciudad.</p>
+            </div>
+
+            {% if error is defined %}
+                <div class="register-flow__error">{{ error }}</div>
+            {% endif %}
+
+            <div class="register-flow__method-choice" data-register-flow-target="methodChoice">
+                <a href="{{ path('connect_google_start') }}" class="register-flow__method-card register-flow__method-card--primary">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+                    </svg>
+                    <span>
+                        <strong>Continuar con Google</strong>
+                        <span>Acceso rápido con tu cuenta social</span>
+                    </span>
+                    <span aria-hidden="true">›</span>
+                </a>
+                <button type="button" class="register-flow__method-card" data-action="click->register-flow#startEmailRegistration">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 6h16v12H4z" fill="none" stroke="currentColor" stroke-width="2"></path>
+                        <path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-width="2"></path>
+                    </svg>
+                    <span>
+                        <strong>Correo y contraseña</strong>
+                        <span>Registro típico paso a paso</span>
+                    </span>
+                    <span aria-hidden="true">›</span>
+                </button>
+            </div>
+
+            <form class="register-flow__form" method="post" novalidate data-action="submit->register-flow#guardSubmit">
+                <section class="register-flow__step is-active" data-register-flow-target="step" data-step-title="Tu información">
+                    <div class="register-flow__field">
+                        <label for="register-first-name">Nombre</label>
+                        <div class="register-flow__input-shell">
+                            <svg class="register-flow__input-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                                <path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path>
+                            </svg>
+                            <input id="register-first-name" name="first_name" type="text" required autocomplete="given-name" placeholder="Ej. Juan" value="{{ app.request.request.get('first_name') }}">
+                        </div>
+                    </div>
+                    <div class="register-flow__field">
+                        <label for="register-last-name">Apellido</label>
+                        <div class="register-flow__input-shell">
+                            <svg class="register-flow__input-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                                <path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path>
+                            </svg>
+                            <input id="register-last-name" name="last_name" type="text" required autocomplete="family-name" placeholder="Ej. Pérez" value="{{ app.request.request.get('last_name') }}">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="register-flow__step" data-register-flow-target="step" data-step-title="Tu acceso">
+                    <div class="register-flow__field">
+                        <label for="register-email">Correo electrónico</label>
+                        <div class="register-flow__input-shell">
+                            <svg class="register-flow__input-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 6h16v12H4z"></path>
+                                <path d="m4 7 8 6 8-6"></path>
+                            </svg>
+                            <input id="register-email" name="email" type="email" required autocomplete="email" placeholder="nombre@ejemplo.com" value="{{ app.request.request.get('email') }}">
+                        </div>
+                    </div>
+                    <div class="register-flow__field">
+                        <label for="register-password">Contraseña</label>
+                        <div class="register-flow__input-shell">
+                            <svg class="register-flow__input-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+                                <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+                            </svg>
+                            <input id="register-password" name="password" type="password" required autocomplete="new-password" minlength="8" placeholder="••••••••" data-register-flow-target="password">
+                            <button class="register-flow__password-toggle" type="button" data-register-flow-target="passwordToggle" data-action="click->register-flow#togglePasswordVisibility" aria-label="Mostrar contraseña">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="register-flow__step" data-register-flow-target="step" data-step-title="Privacidad">
+                    <div class="register-flow__legal">
+                        <strong>Último paso</strong>
+                        <label class="register-flow__check">
+                            <input type="checkbox" name="legal_terms" value="1" required {{ app.request.request.getBoolean('legal_terms') ? 'checked' : '' }}>
+                            <span>
+                                Acepto los
+                                <a href="{{ path('public_legal_show', { slug: 'terminos-publico' }) }}" target="_blank" rel="noreferrer">términos vigentes</a>
+                                y el
+                                <a href="{{ path('public_legal_show', { slug: 'aviso-privacidad' }) }}" target="_blank" rel="noreferrer">aviso de privacidad</a>.
+                            </span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="registration_origin" value="organic">
+                    <div class="register-flow__google-row">
+                        <span>O continúa rápido</span>
+                        <a href="{{ path('connect_google_start') }}" class="register-flow__google">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+                            </svg>
+                            Continuar con Google
+                        </a>
+                    </div>
+                </section>
+
+                <div class="register-flow__actions" data-register-flow-target="actions">
+                    <button type="button" class="register-flow__secondary" data-action="click->register-flow#previous">Anterior</button>
+                    <button type="button" class="register-flow__primary" data-register-flow-target="next" data-action="click->register-flow#next">Continuar ›</button>
+                </div>
+            </form>
+
+            <p class="register-flow__signin">¿Ya tienes cuenta? <a href="{{ path('public_login') }}">Inicia sesión</a></p>
         </section>
     </main>
 {% endblock %}

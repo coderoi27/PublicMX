@@ -5,11 +5,8 @@
 {% block body %}
     {% set is_authenticated = current_user is not null %}
     {% set hero_location_label = 'Guadalupe Tepeyac' %}
-    {% if saved_addresses is not empty %}
-        {% set hero_location_label = saved_addresses[0].label %}
-        {% if saved_addresses[0].city or saved_addresses[0].state %}
-            {% set hero_location_label = hero_location_label ~ ' · ' ~ [saved_addresses[0].city, saved_addresses[0].state]|filter(v => v is not empty)|join(', ') %}
-        {% endif %}
+    {% if initial_location_label is defined and initial_location_label is not empty %}
+        {% set hero_location_label = initial_location_label %}
     {% elseif query_lat is not empty and query_lng is not empty %}
         {% set hero_location_label = 'Ubicación actual' %}
     {% endif %}
@@ -27,6 +24,7 @@
             data-action="click@window->map-shell#closeNotificationsOnOutsideClick click@window->map-shell#closeLocationSwitcherOnOutsideClick keydown@window->map-shell#closeAuthModalOnEscape keydown@window->map-shell#closeMenuOnEscape"
             data-map-shell-feed-url-value="{{ path('public_api_map_feed') }}"
             data-map-shell-authenticated-value="{{ is_authenticated ? 'true' : 'false' }}"
+            data-map-shell-me-url-value="{% if is_authenticated %}{{ path('public_api_me') }}{% endif %}"
             data-map-shell-favorites-url-value="{% if is_authenticated %}{{ path('public_api_favorites_collection') }}{% endif %}"
             data-map-shell-addresses-url-value="{% if is_authenticated %}{{ path('public_api_addresses_collection') }}{% endif %}"
             data-map-shell-google-maps-api-key-value="{{ google_maps_api_key }}"
@@ -36,6 +34,7 @@
             data-map-shell-logo-url-value="{{ logo_url }}"
             data-map-shell-initial-favorites-value='{{ favorite_location_ids|json_encode|raw }}'
             data-map-shell-initial-addresses-value='{{ saved_addresses|json_encode|raw }}'
+            {% if initial_location_label is defined and initial_location_label is not empty %}data-map-shell-initial-location-label-value="{{ initial_location_label }}"{% endif %}
             {% if query_lat is not empty %}data-map-shell-lat-value="{{ query_lat }}"{% endif %}
             {% if query_lng is not empty %}data-map-shell-lng-value="{{ query_lng }}"{% endif %}
         >
@@ -251,7 +250,7 @@
                     </div>
                     <div class="mobile-map-app__menu-actions">
                         {% if is_authenticated %}
-                            <a href="{{ logout_path('main') }}">Cerrar sesión</a>
+                            <a href="{{ path('public_logout') }}">Cerrar sesión</a>
                         {% else %}
                             <a href="{{ path('public_login') }}">Iniciar sesión</a>
                             <a href="{{ path('public_register') }}">Crear cuenta</a>
@@ -387,6 +386,10 @@
                     </article>
                 {% endif %}
                 <div class="mobile-map-app__saved-list" data-map-shell-target="favoritesList"></div>
+                <article class="mobile-map-app__policy-note">
+                    <strong>Política de favoritos</strong>
+                    <p>Por ahora solo puedes guardar locales Mi Monchis. Los Places se podrán guardar cuando estén reclamados o convertidos en ficha canónica.</p>
+                </article>
             </section>
 
             <section class="mobile-map-app__panel is-hidden" data-map-shell-target="addressesSection">
@@ -462,6 +465,7 @@
                         <strong>{{ current_user.firstName }} {{ current_user.lastName }}</strong>
                         <p>{{ current_user.email }}</p>
                         <div class="mobile-map-app__meta-grid">
+                            <span>Cuenta: <strong data-map-shell-target="profileStatus">Cargando...</strong></span>
                             <span>Favoritos: <strong data-map-shell-target="favoritesCountDuplicate">0</strong></span>
                             <span>Mis ubis: <strong data-map-shell-target="addressesCountDuplicate">0</strong></span>
                         </div>
@@ -472,6 +476,12 @@
                         <div class="mobile-map-app__auth-actions">
                             <button type="button" data-action="map-shell#showFavoritesSection">Ver favoritos</button>
                             <button type="button" data-action="map-shell#showAddressesSection">Ver Mis ubis</button>
+                        </div>
+                    </article>
+                    <article class="mobile-map-app__auth-card">
+                        <strong>Legal aceptado</strong>
+                        <div class="mobile-map-app__legal-status-list" data-map-shell-target="profileLegalList">
+                            <p>Cargando aceptaciones...</p>
                         </div>
                     </article>
                 {% else %}

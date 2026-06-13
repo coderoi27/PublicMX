@@ -25,7 +25,7 @@ security:
                 enable_csrf: true
                 default_target_path: public_home
             logout:
-                path: _security_logout
+                path: public_logout
                 target: public_login
             custom_authenticator: App\Security\GoogleAuthenticator
 

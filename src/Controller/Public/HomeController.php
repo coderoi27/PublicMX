@@ -31,17 +31,13 @@ final class HomeController extends AbstractController
             ]);
         }
 
-        $lat = $request->query->get('lat');
-        $lng = $request->query->get('lng');
-
-        $feed = $coreFeedClient->fetchLocations(
-            is_numeric((string) $lat) ? (float) $lat : null,
-            is_numeric((string) $lng) ? (float) $lng : null,
-        );
+        $queryLat = $request->query->get('lat');
+        $queryLng = $request->query->get('lng');
 
         $user = $this->getUser();
         $favoriteLocationIds = [];
         $savedAddresses = [];
+        $primaryAddress = null;
 
         if ($user instanceof PublicUser) {
             $favorites = $entityManager->getRepository(PublicUserFavoritePlace::class)->findBy([
@@ -68,13 +64,28 @@ final class HomeController extends AbstractController
                 'longitude' => $address->getLongitude(),
                 'is_primary' => $address->isPrimary(),
             ], $addresses);
+
+            $primaryAddress = $this->primaryAddress($addresses);
         }
+
+        $effectiveLat = is_numeric((string) $queryLat) ? (float) $queryLat : null;
+        $effectiveLng = is_numeric((string) $queryLng) ? (float) $queryLng : null;
+        $effectiveLocationLabel = null;
+
+        if (($effectiveLat === null || $effectiveLng === null) && $primaryAddress instanceof PublicUserAddress) {
+            $effectiveLat = is_numeric((string) $primaryAddress->getLatitude()) ? (float) $primaryAddress->getLatitude() : null;
+            $effectiveLng = is_numeric((string) $primaryAddress->getLongitude()) ? (float) $primaryAddress->getLongitude() : null;
+            $effectiveLocationLabel = $primaryAddress->getLabel();
+        }
+
+        $feed = $coreFeedClient->fetchLocations($effectiveLat, $effectiveLng);
 
         return $this->render('public/home.html.twig', [
             'locations' => $feed['data'],
             'feed_errors' => $feed['errors'],
-            'query_lat' => $lat,
-            'query_lng' => $lng,
+            'query_lat' => $effectiveLat,
+            'query_lng' => $effectiveLng,
+            'initial_location_label' => $effectiveLocationLabel,
             'current_user' => $user instanceof PublicUser ? $user : null,
             'favorite_location_ids' => $favoriteLocationIds,
             'saved_addresses' => $savedAddresses,
@@ -82,5 +93,25 @@ final class HomeController extends AbstractController
             'walkthrough_enabled' => (bool) $parameterBag->get('app.walkthrough_enabled'),
             'logo_url' => '/images/branding/logo-simple-vertical.png',
         ]);
+    }
+
+    /**
+     * @param array<int, PublicUserAddress> $addresses
+     */
+    private function primaryAddress(array $addresses): ?PublicUserAddress
+    {
+        foreach ($addresses as $address) {
+            if ($address->isPrimary() && $address->getLatitude() !== null && $address->getLongitude() !== null) {
+                return $address;
+            }
+        }
+
+        foreach ($addresses as $address) {
+            if ($address->getLatitude() !== null && $address->getLongitude() !== null) {
+                return $address;
+            }
+        }
+
+        return null;
     }
 }

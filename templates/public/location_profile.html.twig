@@ -1,5 +1,6 @@
 {% extends 'base.html.twig' %}
 
+{% block html_class %}location-profile-document{% endblock %}
 {% block title %}{{ location.location_name ?? 'Local' }} · Mi Monchis MX{% endblock %}
 {% block meta %}
     {% set seo_name = location.location_name ?? location.merchant_name ?? 'Local Mi Monchis' %}
@@ -30,6 +31,7 @@
     {% set is_open = location.open_now is defined and location.open_now is same as(true) %}
     {% set is_closed = location.open_now is defined and location.open_now is same as(false) %}
     {% set hours = location.opening_hours_text is defined and location.opening_hours_text is iterable ? location.opening_hours_text : [] %}
+    {% set today_hours = current_hours_label ?? null %}
     {% set description = location.description ?? location.short_description ?? location.editorial_summary ?? null %}
     {% set services = [
         {'label': 'Servicio a domicilio', 'icon': 'delivery_dining', 'active': location.service_delivery ?? false},
@@ -40,6 +42,7 @@
     {% set lng = location.lng ?? location.longitude ?? null %}
     {% set directions_url = lat and lng ? 'https://www.google.com/maps/dir/?api=1&destination=' ~ lat ~ ',' ~ lng : null %}
     {% set whatsapp_url = location.whatsapp_enabled and location.whatsapp_e164 ? 'https://wa.me/' ~ (location.whatsapp_e164|replace({'+': '', ' ': ''})) : null %}
+    {% set source_label = location.source_type is defined and location.source_type == 'google_places' ? 'Places' : 'Mi Monchis' %}
 
     <main class="location-profile">
         <nav class="location-profile__nav" aria-label="Navegación del perfil">
@@ -59,7 +62,7 @@
         <section class="location-profile__hero {{ photo ? 'has-photo' : '' }}" {% if photo %}style="background-image:url('{{ photo|e('html_attr') }}')"{% endif %}>
             <div class="location-profile__hero-overlay"></div>
             <div class="location-profile__hero-copy">
-                <span class="location-profile__source">Mi Monchis</span>
+                <span class="location-profile__source">{{ source_label }}</span>
                 <h1>{{ name }}</h1>
                 <p>{{ merchant != name ? merchant ~ ' · ' : '' }}{{ category }}</p>
             </div>
@@ -70,6 +73,8 @@
                 <div class="location-profile__identity">
                     {% if location.gem_status is defined and location.gem_status == 'approved' %}
                         <span class="location-profile__badge">Joyita editorial</span>
+                    {% else %}
+                        <span class="location-profile__badge">{{ source_label }}</span>
                     {% endif %}
                     <h2>{{ name }}</h2>
                     <p>{{ description ?: 'Explora este local cercano, revisa sus servicios y decide tu siguiente antojo desde Mi Monchis.' }}</p>
@@ -82,7 +87,7 @@
                     </div>
                     <div>
                         <strong class="{{ is_open ? 'is-open' : (is_closed ? 'is-closed' : '') }}">{{ is_open ? 'Abierto' : (is_closed ? 'Cerrado' : 'Por confirmar') }}</strong>
-                        <span>Estado actual</span>
+                        <span>{{ today_hours ?: 'Horario pendiente' }}</span>
                     </div>
                 </div>
 
@@ -104,10 +109,12 @@
                             Cómo llegar
                         </a>
                     {% endif %}
-                    <a href="{{ qr_url }}" target="_blank" rel="noreferrer" class="location-profile__secondary-action">
-                        <span class="material-symbols-outlined" aria-hidden="true">qr_code_2</span>
-                        QR del local
-                    </a>
+                    {% if qr_url %}
+                        <a href="{{ qr_url }}" target="_blank" rel="noreferrer" class="location-profile__secondary-action">
+                            <span class="material-symbols-outlined" aria-hidden="true">qr_code_2</span>
+                            QR del local
+                        </a>
+                    {% endif %}
                 </div>
             </aside>
 

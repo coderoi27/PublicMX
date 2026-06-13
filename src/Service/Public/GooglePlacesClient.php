@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Public;
 
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -25,6 +27,7 @@ final class GooglePlacesClient
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly RequestStack $requestStack,
+        private readonly CacheInterface $cache,
         private readonly ?string $googlePlacesApiKey,
     ) {
     }
@@ -70,6 +73,43 @@ final class GooglePlacesClient
             return $data['places'] ?? [];
         } catch (TransportExceptionInterface|\Throwable) {
             return [];
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function fetchPlace(string $placeId, array $fieldOptions = []): ?array
+    {
+        if (empty($this->googlePlacesApiKey) || trim($placeId) === '') {
+            return null;
+        }
+
+        $request = $this->requestStack->getCurrentRequest();
+        $referer = $request ? $request->getSchemeAndHttpHost() . '/' : 'http://localhost:8000/';
+
+        $fieldMask = $this->placeDetailsFieldMask($fieldOptions);
+        $cacheKey = 'public_google_place_details_' . md5($placeId . '|' . $fieldMask);
+
+        try {
+            return $this->cache->get($cacheKey, function (ItemInterface $item) use ($placeId, $fieldMask, $referer): ?array {
+                $item->expiresAfter(600);
+
+                $response = $this->httpClient->request('GET', sprintf('https://places.googleapis.com/v1/places/%s', rawurlencode($placeId)), [
+                    'headers' => [
+                        'X-Goog-Api-Key' => $this->googlePlacesApiKey,
+                        'X-Goog-FieldMask' => $fieldMask,
+                        'Referer' => $referer,
+                    ],
+                ]);
+
+                /** @var array<string, mixed> $payload */
+                $payload = $response->toArray(false);
+
+                return $payload !== [] ? $payload : null;
+            });
+        } catch (TransportExceptionInterface|\Throwable) {
+            return null;
         }
     }
 
@@ -155,6 +195,17 @@ final class GooglePlacesClient
         }
 
         return implode(',', array_values(array_unique($fields)));
+    }
+
+    /**
+     * @param array<string, mixed> $fieldOptions
+     */
+    private function placeDetailsFieldMask(array $fieldOptions): string
+    {
+        return implode(',', array_map(
+            static fn (string $field): string => str_starts_with($field, 'places.') ? substr($field, 7) : $field,
+            explode(',', $this->fieldMask($fieldOptions)),
+        ));
     }
 
     /**

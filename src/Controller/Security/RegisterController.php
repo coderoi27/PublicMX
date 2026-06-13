@@ -46,24 +46,28 @@ final class RegisterController extends AbstractController
         if (!$limit->isAccepted()) {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'Alcanzaste el límite temporal de registros. Intenta más tarde.',
+                'show_form' => true,
             ], new Response('', 429));
         }
 
         if ($firstName === '' || $lastName === '' || $email === '' || $password === '') {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'Todos los campos son obligatorios.',
+                'show_form' => true,
             ], new Response('', 422));
         }
 
         if (!$acceptedLegal) {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'Debes aceptar los términos y el aviso de privacidad vigentes para crear tu cuenta.',
+                'show_form' => true,
             ], new Response('', 422));
         }
 
         if ($blockedEmailDomainClient->isBlocked($email)) {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'No aceptamos correos temporales o desechables para crear cuentas.',
+                'show_form' => true,
             ], new Response('', 422));
         }
 
@@ -71,6 +75,7 @@ final class RegisterController extends AbstractController
         if ($existing instanceof PublicUser) {
             return $this->render('security/public_register.html.twig', [
                 'error' => 'Ese correo ya esta registrado.',
+                'show_form' => true,
             ], new Response('', 409));
         }
 

@@ -48,6 +48,8 @@ export default class extends Controller {
         'addressesCount',
         'addressesCountDuplicate',
         'addressesList',
+        'profileStatus',
+        'profileLegalList',
         'addressLabelInput',
         'addressCityInput',
         'addressStateInput',
@@ -70,6 +72,7 @@ export default class extends Controller {
     ];
     static values = {
         feedUrl: String,
+        meUrl: String,
         favoritesUrl: String,
         addressesUrl: String,
         googleMapsApiKey: String,
@@ -80,6 +83,7 @@ export default class extends Controller {
         authenticated: Boolean,
         initialFavorites: Array,
         initialAddresses: Array,
+        initialLocationLabel: String,
         lat: Number,
         lng: Number,
     };
@@ -130,12 +134,15 @@ export default class extends Controller {
         this.walkthroughSelection = null;
         this.userMarker = null;
         this.notificationsOpen = false;
+        this.notificationsStorageKey = 'mi_monchis_public_notifications_read_v1';
+        this.notificationsUnreadCount = this.readNotificationsState() ? 0 : 1;
         this.menuOpen = false;
         this.locationSwitcherOpen = false;
         this.locationSwitcherMode = 'locations';
         this.exploreMode = 'map';
         this.activeSection = 'explore';
         this.placeDetailsCache = new Map();
+        this.profilePayload = null;
         this.lastDiscoveryCenter = null;
         this.isDiscoveringPlaces = false;
         this.isSyncingMapViewport = false;
@@ -149,7 +156,9 @@ export default class extends Controller {
         this.renderFavoritesSummary();
         this.renderAddressesSummary();
         this.renderServiceFilterSummary();
+        this.renderNotificationsState();
         this.renderCookieConsentStatus();
+        this.refreshProfileSummary();
         this.renderExploreMode();
         this.renderActiveSection();
         const walkthroughIsActive = this.initializeWalkthrough();
@@ -178,7 +187,7 @@ export default class extends Controller {
             this.setStatus('Solicitando geolocalización...');
             const coords = await this.requestGeolocation();
             this.applyCoordinates(coords.latitude, coords.longitude);
-            this.updateHeroLocation('Ubicación actual');
+            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue });
             this.setStatus('Ubicación detectada. Refrescando feed...');
             await this.loadFeed();
         } catch (error) {
@@ -305,6 +314,7 @@ export default class extends Controller {
         if (this.notificationsOpen) {
             this.menuOpen = false;
             this.renderMenuState();
+            this.markNotificationsAsRead();
         }
         this.renderNotificationsState();
     }
@@ -319,6 +329,23 @@ export default class extends Controller {
         if (!clickedInsidePanel && !clickedButton) {
             this.notificationsOpen = false;
             this.renderNotificationsState();
+        }
+    }
+
+    readNotificationsState() {
+        try {
+            return window.localStorage.getItem(this.notificationsStorageKey) === 'read';
+        } catch (error) {
+            return false;
+        }
+    }
+
+    markNotificationsAsRead() {
+        this.notificationsUnreadCount = 0;
+        try {
+            window.localStorage.setItem(this.notificationsStorageKey, 'read');
+        } catch (error) {
+            // No bloquear la experiencia si storage no esta disponible.
         }
     }
 
@@ -457,6 +484,7 @@ export default class extends Controller {
         const { lat, lng, label } = event.currentTarget.dataset;
         this.applyCoordinates(Number(lat), Number(lng));
         this.updateHeroLocation(label);
+        this.setStatus(`Explorando cerca de ${label}.`);
         await this.loadFeed();
         this.activeSection = 'explore';
         this.renderActiveSection();
@@ -720,6 +748,7 @@ export default class extends Controller {
             this.resetAddressForm();
             this.setAddressStatus(`Dirección "${payload.label}" guardada correctamente.`);
             this.setStatus('Dirección guardada en tu cuenta.');
+            this.refreshProfileSummary();
             this.logInteraction('public_address_saved', 'user_address', null, payload);
         } catch (error) {
             this.setAddressStatus(error.message);
@@ -740,6 +769,7 @@ export default class extends Controller {
             await this.requestJson(`${this.addressesUrlValue}/${addressId}`, { method: 'DELETE' });
             await this.refreshAddresses();
             this.setAddressStatus('Ubicación eliminada.');
+            this.refreshProfileSummary();
             this.logInteraction('public_address_removed', 'user_address', addressId, {});
         } catch (error) {
             this.setAddressStatus(error.message);
@@ -917,9 +947,9 @@ export default class extends Controller {
                         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11Zm0-8.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z"/></svg>
                         <span class="mobile-map-card__address-text">${this.escapeHtml(this.cardSubtitle(location))}</span>
                     </p>
-                    ${this.categoryTagMarkup(location)}
-                    <div class="mobile-map-card__meta">
+                    <div class="mobile-map-card__meta mobile-map-card__meta--stacked">
                         <span class="mobile-map-card__status ${this.publicationStatusClass(location)}">${this.escapeHtml(this.publicationStatusLabel(location))}</span>
+                        ${this.categoryTagMarkup(location)}
                     </div>
                 </div>
             </article>
@@ -1540,6 +1570,54 @@ export default class extends Controller {
         this.renderAddressesSummary();
     }
 
+    async refreshProfileSummary() {
+        if (!this.authenticatedValue || !this.hasMeUrlValue || this.meUrlValue === '') {
+            return;
+        }
+
+        try {
+            const payload = await this.requestJson(this.meUrlValue, { method: 'GET' });
+            this.profilePayload = payload.data ?? null;
+            this.renderProfileSummary();
+        } catch (error) {
+            if (this.hasProfileStatusTarget) {
+                this.profileStatusTarget.textContent = 'No disponible';
+            }
+            if (this.hasProfileLegalListTarget) {
+                this.profileLegalListTarget.innerHTML = '<p>No pude cargar el estado legal de la cuenta.</p>';
+            }
+        }
+    }
+
+    renderProfileSummary() {
+        if (!this.profilePayload) {
+            return;
+        }
+
+        if (this.hasProfileStatusTarget) {
+            this.profileStatusTarget.textContent = this.profilePayload.email_verified ? 'Verificada' : 'Pendiente';
+        }
+
+        if (this.hasProfileLegalListTarget) {
+            const acceptances = Array.isArray(this.profilePayload.legal_acceptances)
+                ? this.profilePayload.legal_acceptances
+                : [];
+
+            if (acceptances.length === 0) {
+                this.profileLegalListTarget.innerHTML = '<p>Aún no hay aceptaciones legales persistidas para esta cuenta.</p>';
+                return;
+            }
+
+            this.profileLegalListTarget.innerHTML = acceptances.map((acceptance) => `
+                <div class="mobile-map-app__legal-status-item">
+                    <span>${this.escapeHtml(this.humanizeLegalSlug(acceptance.document_slug))}</span>
+                    <strong>${this.escapeHtml(acceptance.version_label ?? 'Sin versión')}</strong>
+                    <small>${this.escapeHtml(this.formatDateTime(acceptance.accepted_at))}</small>
+                </div>
+            `).join('');
+        }
+    }
+
     renderFavoritesSummary() {
         const count = String(this.favoriteLocationIds.length);
 
@@ -1562,26 +1640,57 @@ export default class extends Controller {
                     const location = this.currentLocations.find((candidate) => Number(candidate.location_id) === locationId) ?? null;
                     const title = location?.location_name ?? `Local #${locationId}`;
                     const subtitle = location ? this.cardSubtitle(location) : 'Guardado desde la exploración pública.';
+                    const profileUrl = location ? this.buildProfileUrl(location) : `/l/${locationId}`;
+                    const distance = location?.distance_meters ? `${this.formatDistance(location.distance_meters)} de tu zona actual` : '';
 
                     return `
                     <article class="public-home__saved-row">
                         <div>
                             <strong>${this.escapeHtml(title)}</strong>
                             <p>${this.escapeHtml(subtitle)}</p>
+                            ${distance ? `<small>${this.escapeHtml(distance)}</small>` : ''}
                         </div>
-                        <button
-                            type="button"
-                            class="public-home__inline-button"
-                            data-action="map-shell#removeFavoriteFromList"
-                            data-location-id="${locationId}"
-                        >
-                            Quitar
-                        </button>
+                        <div class="public-home__saved-actions">
+                            <a class="public-home__inline-button" href="${this.escapeHtml(profileUrl)}">Ver perfil</a>
+                            ${location ? `<button
+                                type="button"
+                                class="public-home__inline-button"
+                                data-action="click->map-shell#focusFavoriteFromList"
+                                data-location-id="${locationId}"
+                            >
+                                Ver en mapa
+                            </button>` : ''}
+                            <button
+                                type="button"
+                                class="public-home__inline-button"
+                                data-action="map-shell#removeFavoriteFromList"
+                                data-location-id="${locationId}"
+                            >
+                                Quitar
+                            </button>
+                        </div>
                     </article>
                 `;
                 })
                 .join('');
         }
+    }
+
+    async focusFavoriteFromList(event) {
+        const locationId = Number.parseInt(event.currentTarget.dataset.locationId ?? '', 10);
+        const location = this.currentLocations.find((candidate) => Number(candidate.location_id) === locationId) ?? null;
+        if (!location) {
+            this.setStatus('Ese favorito no está cargado en la zona actual.');
+            return;
+        }
+
+        this.setSelectedLocation(this.locationKey(location));
+        this.activeSection = 'explore';
+        this.renderActiveSection();
+        this.renderList(this.visibleLocations);
+        await this.renderCanvas(this.visibleLocations);
+        this.focusMapLocation(location);
+        this.renderDetailSheet(await this.enrichLocationIfNeeded(location));
     }
 
     renderAddressesSummary() {
@@ -2324,7 +2433,6 @@ export default class extends Controller {
         this.latValue = Number(latitude);
         this.lngValue = Number(longitude);
         this.pendingViewportCenter = this.hasUserCoordinates() ? this.currentUserPosition() : null;
-        this.persistLocationContext();
     }
 
     setWalkthroughError(message) {
@@ -2441,23 +2549,17 @@ export default class extends Controller {
 
     infoWindowMarkup(location) {
         const locationName = this.escapeHtml(location.location_name ?? 'Local sin nombre');
-        const merchantName = this.escapeHtml(location.merchant_name ?? 'Merchant');
-        const address = this.escapeHtml(location.short_address ?? 'Dirección pendiente');
+        const address = this.escapeHtml(this.compactAddressLabel(location.short_address));
         const statusLabel = this.escapeHtml(this.publicationStatusLabel(location));
         const statusClass = this.infoWindowStatusClass(location);
         const distanceLabel = location.distance_meters != null ? this.escapeHtml(this.formatDistance(location.distance_meters)) : 'Zona cercana';
         const sourceLabel = this.escapeHtml(this.sourceTypeLabel(location.source_type));
         const directionsUrl = this.buildDirectionsUrl(location);
-        const whatsappUrl = this.buildWhatsAppUrl(location.whatsapp_enabled, location.whatsapp_e164);
         const reviewsLabel = this.escapeHtml(this.reviewsLabel(location));
-        const sourceBadgeClass = this.sourceBadgeClass(location);
-        const hoursSummary = this.openingHoursSummary(location);
-        const reviewSnippet = this.reviewSnippet(location);
         const categoryKey = this.locationCategoryKey(location);
         const categoryMarkup = categoryKey !== 'all'
-            ? `<span class="map-shell__info-window-badge map-shell__info-window-badge--category" style="--category-accent:${this.escapeHtml(this.categoryColor(categoryKey))};">${this.escapeHtml(this.categoryDisplayName(categoryKey))}</span>`
+            ? `<span class="map-shell__info-window-badge map-shell__info-window-badge--category">${this.escapeHtml(this.categoryDisplayName(categoryKey))}</span>`
             : '';
-        const claimUrl = this.buildClaimUrl(location);
         const detailKey = this.escapeHtml(this.locationKey(location));
 
         return `
@@ -2465,27 +2567,21 @@ export default class extends Controller {
                 <header class="map-shell__info-window-header">
                     <div>
                         <strong>${locationName}</strong>
-                        <p class="map-shell__info-window-merchant">${merchantName}</p>
+                        <p class="map-shell__info-window-address">${address}</p>
                     </div>
                     <div class="map-shell__info-window-badge-stack">
                         ${categoryMarkup}
-                        ${this.locationIsJoyita(location) ? '<span class="map-shell__info-window-badge map-shell__info-window-badge--joyita">Joyita</span>' : ''}
-                        <span class="map-shell__info-window-badge map-shell__info-window-badge--source ${sourceBadgeClass}">${sourceLabel}</span>
                         <span class="map-shell__info-window-badge ${statusClass}">${statusLabel}</span>
+                        <span class="map-shell__info-window-badge map-shell__info-window-badge--source">${sourceLabel}</span>
                     </div>
                 </header>
-                <p class="map-shell__info-window-address">${address}</p>
                 <div class="map-shell__info-window-meta">
                     <span>${distanceLabel}</span>
                     <span>${reviewsLabel}</span>
                 </div>
-                ${hoursSummary ? `<p class="map-shell__info-window-detail">${this.escapeHtml(hoursSummary)}</p>` : ''}
-                ${reviewSnippet ? `<p class="map-shell__info-window-review">${this.escapeHtml(reviewSnippet)}</p>` : ''}
                 <div class="map-shell__info-window-actions">
                     <button type="button" data-action="click->map-shell#openLocationFromInfoWindow" data-location-key="${detailKey}">Ver ficha</button>
                     ${directionsUrl ? `<a href="${this.escapeHtml(directionsUrl)}" target="_blank" rel="noreferrer">Cómo llegar</a>` : ''}
-                    ${whatsappUrl ? `<a href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer">WhatsApp</a>` : ''}
-                    ${claimUrl ? `<a href="${this.escapeHtml(claimUrl)}">Reclamar</a>` : ''}
                 </div>
             </article>
         `;
@@ -3028,8 +3124,8 @@ export default class extends Controller {
 
         this.notificationsPanelTarget.classList.toggle('is-hidden', !this.notificationsOpen);
         if (this.hasNotificationsBadgeTarget) {
-            this.notificationsBadgeTarget.textContent = '1';
-            this.notificationsBadgeTarget.classList.toggle('is-hidden', this.notificationsOpen);
+            this.notificationsBadgeTarget.textContent = String(this.notificationsUnreadCount);
+            this.notificationsBadgeTarget.classList.toggle('is-hidden', this.notificationsUnreadCount <= 0);
         }
     }
 
@@ -3216,6 +3312,13 @@ export default class extends Controller {
 
     restorePersistedLocationContext() {
         const hasServerCoordinates = this.hasUserCoordinates();
+        if (hasServerCoordinates) {
+            const initialLabel = this.hasInitialLocationLabelValue ? this.initialLocationLabelValue : '';
+            this.currentLocationLabel = initialLabel || 'Ubicación actual';
+            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
+            return;
+        }
+
         let persistedContext = null;
 
         try {
@@ -3240,10 +3343,26 @@ export default class extends Controller {
             return;
         }
 
-        if (hasServerCoordinates) {
-            this.currentLocationLabel = 'Ubicación actual';
-            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
+        this.persistPrimarySavedAddressContext();
+    }
+
+    persistPrimarySavedAddressContext() {
+        if (!this.authenticatedValue || !Array.isArray(this.savedAddresses) || this.savedAddresses.length === 0) {
+            return;
         }
+
+        const address = this.savedAddresses.find((item) => item.is_primary && item.latitude && item.longitude)
+            ?? this.savedAddresses.find((item) => item.latitude && item.longitude)
+            ?? null;
+
+        if (!address) {
+            return;
+        }
+
+        this.latValue = Number(address.latitude);
+        this.lngValue = Number(address.longitude);
+        this.currentLocationLabel = address.label || 'Mi ubi guardada';
+        this.updateHeroLocation(this.currentLocationLabel, { persist: true });
     }
 
     async afterLayoutSettles() {
@@ -3411,6 +3530,32 @@ export default class extends Controller {
         return parts.length > 0 ? parts.join(' · ') : 'Sin detalles adicionales.';
     }
 
+    humanizeLegalSlug(slug) {
+        const labels = {
+            'terminos-publico': 'Términos público',
+            'aviso-privacidad': 'Aviso de privacidad',
+            cookies: 'Cookies',
+        };
+
+        return labels[slug] ?? String(slug ?? 'Documento legal');
+    }
+
+    formatDateTime(value) {
+        if (!value) {
+            return 'Sin fecha';
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value);
+        }
+
+        return new Intl.DateTimeFormat('es-MX', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        }).format(date);
+    }
+
     normalizeOptionalCoordinate(value) {
         const trimmed = value.trim();
         return trimmed === '' ? null : trimmed;
@@ -3512,22 +3657,38 @@ export default class extends Controller {
 
     cardSubtitle(location) {
         if (location.source_type === 'google_places') {
-            return location.short_address || 'Dirección pendiente';
-        }
-
-        if (location.merchant_name) {
-            if (location.short_address && location.short_address !== location.merchant_name) {
-                return `${location.merchant_name} • ${location.short_address}`;
-            }
-
-            return location.merchant_name;
+            return this.compactAddressLabel(location.short_address);
         }
 
         if (location.short_address) {
-            return location.short_address;
+            return this.compactAddressLabel(location.short_address);
+        }
+
+        if (location.merchant_name) {
+            return location.merchant_name;
         }
 
         return 'Direccion pendiente';
+    }
+
+    compactAddressLabel(address) {
+        const fallback = 'Direccion pendiente';
+        let value = String(address || '').trim();
+
+        if (!value) {
+            return fallback;
+        }
+
+        value = value
+            .replace(/\bC\.?\s*P\.?\s*\d{5}\b/gi, '')
+            .replace(/,\s*\d{5}\b.*$/u, '')
+            .replace(/\b\d{5}\b.*$/u, '')
+            .replace(/\s*,\s*(Mexico|México)$/iu, '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/\s*,\s*$/u, '')
+            .trim();
+
+        return value || fallback;
     }
 
     formatDistance(distanceMeters) {
@@ -3720,9 +3881,21 @@ export default class extends Controller {
         }
 
         const locationRef = location.location_slug || location.location_id;
-        const locationId = Number.parseInt(String(location.location_id ?? ''), 10);
-        if (locationRef && Number.isInteger(locationId) && location.source_type !== 'google_places') {
-            return `/l/${encodeURIComponent(String(locationRef))}`;
+        if (locationRef) {
+            const url = new URL(`/l/${encodeURIComponent(String(locationRef))}`, window.location.origin);
+            if (location.source_type === 'google_places') {
+                if (location.lat && location.lng) {
+                    url.searchParams.set('lat', String(location.lat));
+                    url.searchParams.set('lng', String(location.lng));
+                }
+
+                const categoryKey = this.locationCategoryKey(location);
+                if (categoryKey !== 'all') {
+                    url.searchParams.set('category', categoryKey);
+                }
+            }
+
+            return `${url.pathname}${url.search}`;
         }
 
         return null;
@@ -3784,8 +3957,10 @@ export default class extends Controller {
         const heroStyle = photoUrl ? `style="background-image:url('${this.escapeHtml(photoUrl)}')"` : '';
         const distanceLabel = this.formatDistance(location.distance_meters) || 'Cerca de ti';
         const description = this.locationDescription(location, reviewSnippet);
-        const galleryMarkup = this.detailGalleryMarkup(location);
         const profileUrl = this.buildProfileUrl(location);
+        const profileActionMarkup = profileUrl
+            ? `<a class="mobile-map-app__detail-action-secondary" href="${this.escapeHtml(profileUrl)}">Ver perfil completo</a>`
+            : (claimUrl ? `<a class="mobile-map-app__detail-action-secondary" href="${this.escapeHtml(claimUrl)}" data-action="click->map-shell#trackExternalAction" data-event-name="public_claim_started" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Crear perfil del local</a>` : '');
 
         this.detailSheetBodyTarget.innerHTML = `
             <div class="mobile-map-app__detail-grabber" aria-hidden="true"></div>
@@ -3847,17 +4022,17 @@ export default class extends Controller {
                 </div>
                 ${this.locationIsJoyita(location) ? `<div class="mobile-map-app__detail-joyita">${this.escapeHtml(this.joyitaDetailLabel(location))}</div>` : ''}
                 ${hoursSummary ? `<p class="mobile-map-app__detail-note">${this.escapeHtml(hoursSummary)}</p>` : ''}
+                ${this.detailGalleryMarkup(location)}
                 <section class="mobile-map-app__detail-section">
                     <h4>Sobre nosotros</h4>
                     <p>${this.escapeHtml(description)}</p>
                 </section>
-                ${galleryMarkup}
                 <div class="mobile-map-app__detail-actions mobile-map-app__detail-actions--primary">
                     ${whatsappUrl ? `<a class="mobile-map-app__detail-action-primary" href="${this.escapeHtml(whatsappUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_whatsapp_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.6a8 8 0 0 1-11.8 7l-3.2.9.9-3.1A8 8 0 1 1 20 11.6Z" /><path d="M9.4 8.8c.2 2.7 2.2 4.7 4.9 5" /></svg>
                         Pedir por WhatsApp
                     </a>` : ''}
-                    ${profileUrl ? `<a class="mobile-map-app__detail-action-secondary" href="${this.escapeHtml(profileUrl)}">Ver perfil completo</a>` : '<button type="button" class="mobile-map-app__detail-action-secondary" disabled>Ver perfil completo</button>'}
+                    ${profileActionMarkup}
                 </div>
                 <div class="mobile-map-app__detail-actions mobile-map-app__detail-actions--secondary">
                     ${directionsUrl ? `<a href="${this.escapeHtml(directionsUrl)}" target="_blank" rel="noreferrer" data-action="click->map-shell#trackExternalAction" data-event-name="public_directions_clicked" data-entity-id="${this.escapeHtml(String(location.location_id ?? ''))}" data-location-key="${detailKey}">Cómo llegar</a>` : ''}

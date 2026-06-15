@@ -36,6 +36,7 @@ final class HomeController extends AbstractController
 
         $user = $this->getUser();
         $favoriteLocationIds = [];
+        $favoriteItems = [];
         $savedAddresses = [];
         $primaryAddress = null;
 
@@ -44,10 +45,11 @@ final class HomeController extends AbstractController
                 'publicUser' => $user,
             ]);
 
-            $favoriteLocationIds = array_values(array_map(
-                static fn (PublicUserFavoritePlace $favorite): int => $favorite->getLocationId(),
+            $favoriteItems = array_map(static fn (PublicUserFavoritePlace $favorite): array => $favorite->toPayload(), $favorites);
+            $favoriteLocationIds = array_values(array_filter(array_map(
+                static fn (PublicUserFavoritePlace $favorite): ?int => $favorite->getLocationId(),
                 $favorites,
-            ));
+            )));
 
             $addresses = $entityManager->getRepository(PublicUserAddress::class)->findBy(
                 ['publicUser' => $user],
@@ -88,6 +90,7 @@ final class HomeController extends AbstractController
             'initial_location_label' => $effectiveLocationLabel,
             'current_user' => $user instanceof PublicUser ? $user : null,
             'favorite_location_ids' => $favoriteLocationIds,
+            'favorite_items' => $favoriteItems,
             'saved_addresses' => $savedAddresses,
             'google_maps_api_key' => (string) $parameterBag->get('app.google_maps_api_key'),
             'walkthrough_enabled' => (bool) $parameterBag->get('app.walkthrough_enabled'),

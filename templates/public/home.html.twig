@@ -32,7 +32,7 @@
             data-map-shell-event-log-url-value="{{ path('public_api_interactions_log') }}"
             data-map-shell-walkthrough-enabled-value="{{ walkthrough_enabled ? 'true' : 'false' }}"
             data-map-shell-logo-url-value="{{ logo_url }}"
-            data-map-shell-initial-favorites-value='{{ favorite_location_ids|json_encode|raw }}'
+            data-map-shell-initial-favorites-value='{{ favorite_items|default([])|json_encode|raw }}'
             data-map-shell-initial-addresses-value='{{ saved_addresses|json_encode|raw }}'
             {% if initial_location_label is defined and initial_location_label is not empty %}data-map-shell-initial-location-label-value="{{ initial_location_label }}"{% endif %}
             {% if query_lat is not empty %}data-map-shell-lat-value="{{ query_lat }}"{% endif %}
@@ -75,15 +75,7 @@
                             >
                         </div>
                         <div class="welcome-flow__suggestions is-hidden" data-map-shell-target="walkthroughSuggestions"></div>
-                        <button type="submit" class="welcome-flow__submit">
-                            <span>Explorar</span>
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <circle cx="11" cy="11" r="6" />
-                                <path d="m16 16 4 4" />
-                            </svg>
-                        </button>
-                    </form>
-                    <button
+                                            <button
                         type="button"
                         class="welcome-flow__geo is-hidden"
                         data-map-shell-target="walkthroughGeoButton"
@@ -98,6 +90,15 @@
                         </svg>
                         <span>o haz clic aqui para obtener tu ubicacion</span>
                     </button>
+                        <button type="submit" class="welcome-flow__submit">
+                            <span>Explorar</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="11" cy="11" r="6" />
+                                <path d="m16 16 4 4" />
+                            </svg>
+                        </button>
+                    </form>
+
                     <p class="welcome-flow__error is-hidden" data-map-shell-target="walkthroughError"></p>
                 </section>
 
@@ -244,6 +245,10 @@
                         <p>Categorías</p>
                         <div class="mobile-map-app__menu-categories" data-map-shell-target="menuCategoryList"></div>
                     </div>
+                    <div class="mobile-map-app__menu-group mobile-map-app__menu-group--filters">
+                        <p>Ordenar por</p>
+                        <div class="mobile-map-app__menu-source" data-map-shell-target="menuSortFilterRow"></div>
+                    </div>
                     <div class="mobile-map-app__menu-group">
                         <p>Para locales</p>
                         <a href="{{ path('public_claim_location') }}">Reclamar o registrar mi local</a>
@@ -268,6 +273,14 @@
                         <strong data-map-shell-target="count">{{ locations|length }}</strong>
                     </div>
 
+                    <aside class="mobile-map-app__route-panel is-hidden" data-map-shell-target="routePanel" aria-live="polite">
+                        <div>
+                            <span data-map-shell-target="routeStatus">Ruta dentro de Mi Monchis</span>
+                            <strong data-map-shell-target="routeMeta">Selecciona un local para trazarla.</strong>
+                        </div>
+                        <button type="button" data-action="map-shell#clearInternalRoute">Limpiar</button>
+                    </aside>
+
                     <div class="map-shell__canvas-note" data-map-shell-target="canvasNote">
                         <span class="map-shell__canvas-loader" aria-hidden="true"></span>
                         <span>Cargando mapa y locales...</span>
@@ -276,6 +289,7 @@
                     <div class="mobile-map-app__chip-row mobile-map-app__chip-row--map" data-map-shell-target="chipRowContainer">
                         <div class="mobile-map-app__source-segmented-control" data-map-shell-target="sourceFilterRow"></div>
                         <div style="display: contents;" data-map-shell-target="chipRow"></div>
+                        <div class="mobile-map-app__sort-filter-row" data-map-shell-target="sortFilterRow"></div>
                     </div>
 
                     <div class="mobile-map-app__floating-controls">

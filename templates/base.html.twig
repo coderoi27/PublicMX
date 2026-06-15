@@ -28,43 +28,69 @@
         {% set ga_id = app.request.server.get('GOOGLE_ANALYTICS_MEASUREMENT_ID') ?? app.request.server.get('GOOGLE_ANALYTICS_ID') %}
         {% if app.environment == 'prod' and ga_id %}
             <script>
-                // 1. Setup inicial de Consent Mode (Todo bloqueado por defecto)
+                // Consent Mode bloquea analitica hasta que el usuario acepte cookies opcionales.
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
+                window.__miMonchisAnalyticsId = '{{ ga_id|e('js') }}';
+                window.__miMonchisAnalyticsPageViewSent = false;
+                window.__miMonchisAnalyticsConsentGranted = false;
+                window.__miMonchisHasAnalyticsConsent = function() {
+                    try {
+                        var consentStr = window.localStorage.getItem('mi_monchis_cookie_consent');
+                        if (!consentStr) {
+                            return false;
+                        }
+
+                        var consentObj = JSON.parse(consentStr);
+                        return Boolean(consentObj && (consentObj.scope === 'all' || consentObj.categories?.analytics === true));
+                    } catch(e) {
+                        return false;
+                    }
+                };
                 gtag('consent', 'default', {
                     'analytics_storage': 'denied',
                     'ad_storage': 'denied'
                 });
 
-                // 2. Revisión de consentimiento persistido en localStorage
-                (function() {
-                    try {
-                        var consentStr = window.localStorage.getItem('mi_monchis_cookie_consent');
-                        if (consentStr) {
-                            var consentObj = JSON.parse(consentStr);
-                            if (consentObj && consentObj.scope === 'all') {
-                                gtag('consent', 'update', {
-                                    'analytics_storage': 'granted',
-                                    'ad_storage': 'granted'
-                                });
-                            }
-                        }
-                    } catch(e) {}
-                })();
+                if (window.__miMonchisHasAnalyticsConsent()) {
+                    window.__miMonchisAnalyticsConsentGranted = true;
+                    gtag('consent', 'update', {
+                        'analytics_storage': 'granted',
+                        'ad_storage': 'granted'
+                    });
+                }
             </script>
             <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id|e('html_attr') }}"></script>
             <script>
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
-                gtag('config', '{{ ga_id|e('js') }}');
-                
-                // Exponer funcion para actualizar consentimiento en tiempo real
+
+                if (window.__miMonchisAnalyticsConsentGranted) {
+                    gtag('config', window.__miMonchisAnalyticsId);
+                    window.__miMonchisAnalyticsPageViewSent = true;
+                } else {
+                    gtag('config', window.__miMonchisAnalyticsId, { 'send_page_view': false });
+                }
+
                 window.__miMonchisGrantConsent = function() {
+                    if (!window.__miMonchisAnalyticsId) {
+                        return;
+                    }
+
                     gtag('consent', 'update', {
                         'analytics_storage': 'granted',
                         'ad_storage': 'granted'
                     });
+
+                    if (!window.__miMonchisAnalyticsPageViewSent) {
+                        gtag('event', 'page_view', {
+                            page_title: document.title,
+                            page_location: window.location.href,
+                            page_path: window.location.pathname + window.location.search
+                        });
+                        window.__miMonchisAnalyticsPageViewSent = true;
+                    }
                 };
                 window.addEventListener('mi-monchis:analytics-consent-granted', window.__miMonchisGrantConsent);
             </script>

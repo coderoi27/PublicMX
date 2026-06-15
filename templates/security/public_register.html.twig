@@ -208,16 +208,16 @@
             grid-template-columns: auto 1fr auto;
             align-items: center;
             gap: 0.7rem;
-            border: 1px solid #ddc1af;
+            border: 1px solid var(--mm-form-border, #ddc1af);
             border-radius: 14px;
-            background: rgba(255, 255, 255, 0.82);
+            background: var(--mm-form-shell-bg, rgba(255, 255, 255, 0.86));
             padding: 0 0.9rem;
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
         }
 
         .register-flow__input-shell:focus-within {
-            border-color: #944a00;
-            box-shadow: 0 0 0 4px rgba(148, 74, 0, 0.08);
+            border-color: var(--mm-form-border-strong, #f27f0d);
+            box-shadow: 0 0 0 4px var(--mm-form-focus-ring, rgba(242, 127, 13, 0.12));
         }
 
         .register-flow__input-shell input {

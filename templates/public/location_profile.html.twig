@@ -41,12 +41,22 @@
     {% set lat = location.lat ?? location.latitude ?? null %}
     {% set lng = location.lng ?? location.longitude ?? null %}
     {% set directions_url = lat and lng ? 'https://www.google.com/maps/dir/?api=1&destination=' ~ lat ~ ',' ~ lng : null %}
+    {% set map_query = lat and lng ? lat ~ ',' ~ lng : address %}
+    {% set map_embed_url = map_query ? 'https://www.google.com/maps?q=' ~ (map_query|url_encode) ~ '&z=16&output=embed' : null %}
     {% set whatsapp_url = location.whatsapp_enabled and location.whatsapp_e164 ? 'https://wa.me/' ~ (location.whatsapp_e164|replace({'+': '', ' ': ''})) : null %}
     {% set source_label = location.source_type is defined and location.source_type == 'google_places' ? 'Places' : 'Mi Monchis' %}
+    {% set back_query = {} %}
+    {% if app.request.query.get('sheet_location') %}
+        {% set back_query = back_query|merge({'sheet_location': app.request.query.get('sheet_location')}) %}
+    {% endif %}
+    {% if app.request.query.get('lat') and app.request.query.get('lng') %}
+        {% set back_query = back_query|merge({'lat': app.request.query.get('lat'), 'lng': app.request.query.get('lng')}) %}
+    {% endif %}
+    {% set back_href = path('public_home', back_query) %}
 
     <main class="location-profile">
         <nav class="location-profile__nav" aria-label="Navegación del perfil">
-            <a href="{{ path('public_home') }}" class="location-profile__nav-button" aria-label="Volver al mapa">
+            <a href="{{ back_href }}" class="location-profile__nav-button" aria-label="Volver al mapa" data-turbo="false">
                 <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
             </a>
             <div class="location-profile__nav-actions">
@@ -85,20 +95,20 @@
                         <strong>{{ rating ? rating|number_format(1) : 'N/D' }}</strong>
                         <span>{{ reviews ? reviews ~ ' reseñas' : 'Sin reseñas' }}</span>
                     </div>
-                    <div>
-                        <strong class="{{ is_open ? 'is-open' : (is_closed ? 'is-closed' : '') }}">{{ is_open ? 'Abierto' : (is_closed ? 'Cerrado' : 'Por confirmar') }}</strong>
+                    <div class="{{ is_open ? 'location-profile__stat--open' : (is_closed ? 'location-profile__stat--closed' : 'location-profile__stat--pending') }}">
+                        <strong class="{{ is_open ? 'is-open' : (is_closed ? 'is-closed' : 'is-pending') }}">{{ is_open ? 'Abierto' : (is_closed ? 'Cerrado' : 'Por confirmar') }}</strong>
                         <span>{{ today_hours ?: 'Horario pendiente' }}</span>
                     </div>
                 </div>
 
                 <div class="location-profile__actions">
                     {% if whatsapp_url %}
-                        <a href="{{ whatsapp_url }}" target="_blank" rel="noreferrer" class="location-profile__primary-action">
+                        <a href="{{ whatsapp_url }}" target="_blank" rel="noreferrer" class="location-profile__primary-action location-profile__primary-action--whatsapp">
                             <span class="material-symbols-outlined" aria-hidden="true">chat</span>
                             Chatear con el local
                         </a>
                     {% else %}
-                        <button type="button" class="location-profile__primary-action" disabled>
+                        <button type="button" class="location-profile__primary-action location-profile__primary-action--whatsapp" disabled>
                             <span class="material-symbols-outlined" aria-hidden="true">chat</span>
                             WhatsApp pendiente
                         </button>
@@ -144,6 +154,15 @@
                         <p>{{ address }}</p>
                     </div>
                     <div class="location-profile__map-preview">
+                        {% if map_embed_url %}
+                            <iframe
+                                src="{{ map_embed_url }}"
+                                title="Mapa de {{ name }}"
+                                loading="lazy"
+                                referrerpolicy="no-referrer-when-downgrade"
+                                allowfullscreen
+                            ></iframe>
+                        {% endif %}
                         <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
                     </div>
                 </article>

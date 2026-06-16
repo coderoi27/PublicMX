@@ -7,6 +7,7 @@ namespace App\Controller\Public;
 use App\Entity\Public\PublicInterestLead;
 use App\Entity\Public\PublicUser;
 use App\Service\Public\BlockedEmailDomainClient;
+use App\Service\Public\BrandingConfigProvider;
 use App\Service\Public\InvitationRequestClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -29,6 +30,7 @@ final class AlphaInvitationRequestController extends AbstractController
         EntityManagerInterface $entityManager,
         InvitationRequestClient $invitationRequestClient,
         BlockedEmailDomainClient $blockedEmailDomainClient,
+        BrandingConfigProvider $brandingConfigProvider,
         MailerInterface $mailer,
         ParameterBagInterface $parameterBag,
         #[Autowire(service: 'limiter.public_alpha_invitation')] RateLimiterFactory $alphaInvitationLimiter,
@@ -80,6 +82,7 @@ final class AlphaInvitationRequestController extends AbstractController
         }
 
         $absoluteInvitationUrl = $this->toAbsoluteUrl((string) $invitation['invitation_url'], $request);
+        $branding = $brandingConfigProvider->current();
         $expiresAt = $invitation['expires_at'] !== null && $invitation['expires_at'] !== ''
             ? new \DateTimeImmutable((string) $invitation['expires_at'])
             : null;
@@ -94,7 +97,7 @@ final class AlphaInvitationRequestController extends AbstractController
             ->html($this->renderView('emails/public_alpha_invitation.html.twig', [
                 'invitation_url' => $absoluteInvitationUrl,
                 'expires_at' => $expiresAt,
-                'logo_url' => $request->getSchemeAndHttpHost() . '/images/branding/logo-simple-vertical.png',
+                'logo_url' => $brandingConfigProvider->absoluteAssetUrl($request, $branding['logo_url']),
             ]));
 
         $mailerDsn = trim((string) $parameterBag->get('app.mailer_dsn'));

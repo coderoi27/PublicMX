@@ -1349,7 +1349,7 @@ svg {
     z-index: var(--mm-layer-controls);
     width: min(23rem, calc(100% - 2rem));
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 0.8rem;
     border: 1px solid rgba(221, 193, 175, 0.7);
@@ -1378,7 +1378,8 @@ svg {
     line-height: 1.25;
 }
 
-.mobile-map-app__route-panel button {
+.mobile-map-app__route-panel button,
+.mobile-map-app__route-panel a {
     min-height: 2.35rem;
     border: 1px solid #ddc1af;
     border-radius: 999px;
@@ -1388,6 +1389,10 @@ svg {
     font-size: 0.76rem;
     font-weight: 900;
     cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .mobile-map-app__route-panel[data-route-state="route_loading"] {

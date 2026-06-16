@@ -64,6 +64,7 @@ export default class extends Controller {
         'routePanel',
         'routeStatus',
         'routeMeta',
+        'routeFallbackLink',
         'walkthrough',
         'walkthroughCursor',
         'walkthroughCopy',
@@ -2225,7 +2226,7 @@ export default class extends Controller {
 
         this.activeRouteKey = null;
         this.activeRouteLocationName = null;
-        this.setRouteState('idle');
+        this.setRouteState('idle', '', '', null);
 
         if (!options.silent) {
             this.setStatus('Ruta interna cerrada.');
@@ -2242,6 +2243,7 @@ export default class extends Controller {
         }
 
         const origin = this.currentUserPosition();
+        const fallbackDirectionsUrl = this.buildDirectionsUrl(location);
         const destination = {
             lat: Number(location.lat),
             lng: Number(location.lng),
@@ -2250,12 +2252,12 @@ export default class extends Controller {
         if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng)) {
             const permissionState = await this.geolocationPermissionState();
             if (permissionState === 'denied') {
-                this.setRouteState('permission_denied', 'Permiso de ubicación denegado', 'Activa ubicación o elige una ubi guardada para trazar ruta.');
+                this.setRouteState('permission_denied', 'Permiso de ubicación denegado', 'Activa ubicación o elige una ubi guardada para trazar ruta.', fallbackDirectionsUrl);
                 this.setStatus('Permiso de ubicación denegado. Usa una ubi guardada o habilita geolocalización.');
                 return;
             }
 
-            this.setRouteState('origin_missing', 'Falta origen', 'Elige una ubi o usa geolocalización para trazar ruta.');
+            this.setRouteState('origin_missing', 'Falta origen', 'Elige una ubi o usa geolocalización para trazar ruta.', fallbackDirectionsUrl);
             this.setStatus('Elige una ubi o usa geolocalización para trazar ruta dentro de Mi Monchis.');
             return;
         }
@@ -2310,7 +2312,7 @@ export default class extends Controller {
                 location_key: locationKey,
             });
         } catch (error) {
-            this.setRouteState('route_error', 'No se pudo trazar ruta', 'Usa Cómo llegar como respaldo externo.');
+            this.setRouteState('route_error', 'No se pudo trazar ruta', 'Usa Cómo llegar como respaldo externo.', fallbackDirectionsUrl);
             this.setStatus(`No pude trazar la ruta interna. Puedes abrir Maps como respaldo.`);
             this.logInteraction('public_internal_route_failed', 'location', Number(location.location_id) || null, {
                 source_type: location.source_type ?? null,
@@ -2333,7 +2335,7 @@ export default class extends Controller {
         }
     }
 
-    setRouteState(state, status = '', meta = '') {
+    setRouteState(state, status = '', meta = '', fallbackUrl = null) {
         this.routeState = state;
         if (!this.hasRoutePanelTarget) {
             return;
@@ -2348,6 +2350,16 @@ export default class extends Controller {
         }
         if (this.hasRouteMetaTarget) {
             this.routeMetaTarget.textContent = meta || '';
+        }
+        if (this.hasRouteFallbackLinkTarget) {
+            const canUseFallback = fallbackUrl !== null && fallbackUrl !== '' && state !== 'idle' && state !== 'route_loading' && state !== 'route_ready';
+            this.routeFallbackLinkTarget.classList.toggle('is-hidden', !canUseFallback);
+            this.routeFallbackLinkTarget.setAttribute('aria-hidden', canUseFallback ? 'false' : 'true');
+            if (canUseFallback) {
+                this.routeFallbackLinkTarget.href = fallbackUrl;
+            } else {
+                this.routeFallbackLinkTarget.removeAttribute('href');
+            }
         }
     }
 
@@ -4392,7 +4404,18 @@ export default class extends Controller {
             ...options,
         });
 
-        const payload = await response.json();
+        const rawPayload = await response.text();
+        let payload = {};
+        if (rawPayload !== '') {
+            try {
+                payload = JSON.parse(rawPayload);
+            } catch (error) {
+                payload = {
+                    errors: [response.ok ? 'Respuesta inválida del servidor.' : `El servidor respondió ${response.status}.`],
+                };
+            }
+        }
+
         if (!response.ok || (Array.isArray(payload.errors) && payload.errors.length > 0)) {
             throw new Error(payload.errors?.[0] ?? 'La operación no se pudo completar.');
         }
@@ -4581,7 +4604,11 @@ export default class extends Controller {
     async loadOwnReviewsForSubject(dataset) {
         const list = [...(this.detailSheetBodyTarget?.querySelectorAll('[data-own-review-list]') ?? [])]
             .find((candidate) => candidate.dataset.reviewKey === (dataset.reviewKey ?? ''));
-        if (!list || !this.hasReviewsUrlValue || this.reviewsUrlValue === '') {
+        if (!list) {
+            return;
+        }
+        if (!this.hasReviewsUrlValue || this.reviewsUrlValue === '') {
+            list.innerHTML = '<p class="is-error">El endpoint de reseñas no está disponible.</p>';
             return;
         }
 
@@ -4741,7 +4768,7 @@ export default class extends Controller {
                 <div class="mobile-map-app__detail-actions mobile-map-app__detail-actions--primary">
                     <button type="button" class="mobile-map-app__detail-action-primary mobile-map-app__detail-action-primary--route" data-action="click->map-shell#startInternalRoute" data-location-key="${detailKey}">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
-                        Cómo llegar
+                        Ruta en Mi Monchis
                     </button>
                     ${profileActionMarkup}
                 </div>

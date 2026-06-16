@@ -138,8 +138,13 @@ final class ReviewsController extends AbstractController
         }
 
         $storageUrl = trim((string) ($payload['storage_url'] ?? $payload['url'] ?? ''));
-        if ($storageUrl === '' || filter_var($storageUrl, FILTER_VALIDATE_URL) === false) {
-            return $this->json(['data' => null, 'meta' => [], 'errors' => ['Field "storage_url" must be a valid URL.']], 422);
+        $storageScheme = parse_url($storageUrl, PHP_URL_SCHEME);
+        if (
+            $storageUrl === ''
+            || filter_var($storageUrl, FILTER_VALIDATE_URL) === false
+            || !in_array($storageScheme, ['http', 'https'], true)
+        ) {
+            return $this->json(['data' => null, 'meta' => [], 'errors' => ['Field "storage_url" must be a valid http(s) URL.']], 422);
         }
 
         $media = (new PublicUserReviewMedia())

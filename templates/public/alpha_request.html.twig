@@ -6,9 +6,17 @@
 {% block importmap %}{{ importmap('alpha_gate') }}{% endblock %}
 
 {% block body %}
+    {% set branding = branding|default({
+        app_name: 'Mi Monchis MX',
+        short_name: 'Mi Monchis',
+        logo_url: logo_url|default('/images/branding/logo-simple-vertical.png'),
+        logo_horizontal_url: '/images/mi-monchis-horizontal.png',
+        icon_url: '/images/mi-monchis-cuadrado.png',
+        copyright: '© 2026 Mi Monchis. Hecho con antojo.'
+    }) %}
     <main class="alpha-gate">
         <section class="alpha-gate__card" aria-labelledby="alpha-gate-title" data-alpha-gate>
-            <img src="{{ asset('images/mi-monchis-horizontal.png') }}" alt="Mi Monchis MX" class="alpha-gate__logo is-presenting" data-alpha-present="1">
+            <img src="{{ branding.logo_horizontal_url }}" alt="{{ branding.app_name }}" class="alpha-gate__logo is-presenting" data-alpha-present="1">
             <p class="alpha-gate__eyebrow is-presenting" data-alpha-present="2">Alpha exclusiva</p>
             <h1 class="alpha-gate__title" id="alpha-gate-title" data-alpha-typewriter="¿estás listo para explorar tu antojo?"></h1>
             {% set error_messages = app.flashes('error') %}
@@ -73,6 +81,6 @@
     </main>
     <footer class="alpha-gate-footer">
         {% include 'public/_partials/legal_links.html.twig' %}
-        <p>© 2026 Mi Monchis. Hecho con antojo.</p>
+        <p>{{ branding.copyright }}</p>
     </footer>
 {% endblock %}

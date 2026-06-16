@@ -1,15 +1,23 @@
 {% extends 'base.html.twig' %}
 
 {% block html_class %}location-profile-document{% endblock %}
-{% block title %}{{ location.location_name ?? 'Local' }} · Mi Monchis MX{% endblock %}
+{% set branding = branding|default({
+    app_name: 'Mi Monchis MX',
+    short_name: 'Mi Monchis',
+    logo_url: '/images/branding/logo-simple-vertical.png',
+    logo_horizontal_url: '/images/mi-monchis-horizontal.png',
+    icon_url: '/images/mi-monchis-cuadrado.png',
+    copyright: '© 2026 Mi Monchis. Hecho con antojo.'
+}) %}
+{% block title %}{{ location.location_name|default('Local') }} · {{ branding.app_name }}{% endblock %}
 {% block meta %}
-    {% set seo_name = location.location_name ?? location.merchant_name ?? 'Local Mi Monchis' %}
-    {% set seo_description = location.short_description ?? location.service_notes ?? 'Consulta servicios, horario y ubicación de este local en Mi Monchis MX.' %}
-    {% set seo_photo = location.photo_url ?? location.category_cover_photo_url ?? location.category_default_photo_url ?? asset('images/mi-monchis-cuadrado.png') %}
+    {% set seo_name = location.location_name|default(location.merchant_name|default('Local Mi Monchis')) %}
+    {% set seo_description = location.short_description|default(location.service_notes|default('Consulta servicios, horario y ubicación de este local en ' ~ branding.app_name ~ '.')) %}
+    {% set seo_photo = location.photo_url|default(location.category_cover_photo_url|default(location.category_default_photo_url|default(branding.icon_url))) %}
     <meta name="description" content="{{ seo_description|striptags|slice(0, 155)|e('html_attr') }}">
     <link rel="canonical" href="{{ canonical_url }}">
     <meta property="og:type" content="place">
-    <meta property="og:title" content="{{ seo_name|e('html_attr') }} · Mi Monchis MX">
+    <meta property="og:title" content="{{ seo_name|e('html_attr') }} · {{ branding.app_name|e('html_attr') }}">
     <meta property="og:description" content="{{ seo_description|striptags|slice(0, 155)|e('html_attr') }}">
     <meta property="og:url" content="{{ canonical_url }}">
     <meta property="og:image" content="{{ seo_photo }}">

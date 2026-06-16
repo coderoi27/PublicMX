@@ -7,6 +7,7 @@ namespace App\Controller\Public;
 use App\Entity\Public\PublicUser;
 use App\Entity\Public\PublicUserAddress;
 use App\Entity\Public\PublicUserFavoritePlace;
+use App\Service\Public\BrandingConfigProvider;
 use App\Service\Public\CoreFeedClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -21,13 +22,16 @@ final class HomeController extends AbstractController
     public function __invoke(
         Request $request,
         CoreFeedClient $coreFeedClient,
+        BrandingConfigProvider $brandingConfigProvider,
         EntityManagerInterface $entityManager,
         ParameterBagInterface $parameterBag,
     ): Response
     {
+        $branding = $brandingConfigProvider->current();
         if ((bool) $parameterBag->get('app.alpha_invite_required') && $request->getSession()->get('alpha_access_granted') !== true) {
             return $this->render('public/alpha_request.html.twig', [
-                'logo_url' => '/images/branding/logo-simple-vertical.png',
+                'branding' => $branding,
+                'logo_url' => $branding['logo_url'],
             ]);
         }
 
@@ -94,7 +98,8 @@ final class HomeController extends AbstractController
             'saved_addresses' => $savedAddresses,
             'google_maps_api_key' => (string) $parameterBag->get('app.google_maps_api_key'),
             'walkthrough_enabled' => (bool) $parameterBag->get('app.walkthrough_enabled'),
-            'logo_url' => '/images/branding/logo-simple-vertical.png',
+            'branding' => $branding,
+            'logo_url' => $branding['logo_url'],
         ]);
     }
 

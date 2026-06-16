@@ -6,6 +6,7 @@ namespace App\Controller\Public;
 
 use App\Entity\Public\PublicUser;
 use App\Entity\Public\PublicUserReview;
+use App\Service\Public\BrandingConfigProvider;
 use App\Service\Public\CoreFeedClient;
 use App\Service\Public\GooglePlacesClient;
 use Doctrine\ORM\EntityManagerInterface;
@@ -23,15 +24,18 @@ final class LocationProfileController extends AbstractController
         string $locationRef,
         Request $request,
         CoreFeedClient $coreFeedClient,
+        BrandingConfigProvider $brandingConfigProvider,
         GooglePlacesClient $placesClient,
         EntityManagerInterface $entityManager,
         ParameterBagInterface $parameterBag,
         #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.google_maps_api_key%')]
         string $googleMapsApiKey,
     ): Response {
+        $branding = $brandingConfigProvider->current();
         if ((bool) $parameterBag->get('app.alpha_invite_required') && $request->getSession()->get('alpha_access_granted') !== true) {
             return $this->render('public/alpha_request.html.twig', [
-                'logo_url' => '/images/branding/logo-simple-vertical.png',
+                'branding' => $branding,
+                'logo_url' => $branding['logo_url'],
             ]);
         }
 
@@ -78,6 +82,7 @@ final class LocationProfileController extends AbstractController
                 : $this->generateUrl('public_location_profile_qr', ['locationRef' => $location['location_slug'] ?? $location['location_id']]),
             'current_hours_label' => $this->currentOpeningHoursLabel($openingHoursText),
             'feed_errors' => $feed['errors'],
+            'branding' => $branding,
         ]);
     }
 

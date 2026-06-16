@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Controller\Public;
 
+use App\Entity\Public\PublicUser;
+use App\Entity\Public\PublicUserReview;
 use App\Service\Public\CoreFeedClient;
 use App\Service\Public\GooglePlacesClient;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -21,6 +24,7 @@ final class LocationProfileController extends AbstractController
         Request $request,
         CoreFeedClient $coreFeedClient,
         GooglePlacesClient $placesClient,
+        EntityManagerInterface $entityManager,
         ParameterBagInterface $parameterBag,
         #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.google_maps_api_key%')]
         string $googleMapsApiKey,
@@ -67,6 +71,7 @@ final class LocationProfileController extends AbstractController
 
         return $this->render('public/location_profile.html.twig', [
             'location' => $location,
+            'own_reviews' => $this->reviewsForLocation($location, $entityManager),
             'canonical_url' => $this->canonicalLocationUrl($request, $location),
             'qr_url' => ($location['source_type'] ?? null) === 'google_places'
                 ? null
@@ -74,6 +79,65 @@ final class LocationProfileController extends AbstractController
             'current_hours_label' => $this->currentOpeningHoursLabel($openingHoursText),
             'feed_errors' => $feed['errors'],
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $location
+     * @return list<array<string, mixed>>
+     */
+    private function reviewsForLocation(array $location, EntityManagerInterface $entityManager): array
+    {
+        $reviewKey = $this->reviewKeyForLocation($location);
+        if ($reviewKey === null) {
+            return [];
+        }
+
+        $viewer = $this->getUser();
+        $viewer = $viewer instanceof PublicUser ? $viewer : null;
+        $qb = $entityManager->getRepository(PublicUserReview::class)->createQueryBuilder('review')
+            ->leftJoin('review.media', 'media')
+            ->addSelect('media')
+            ->andWhere('review.reviewKey = :reviewKey')
+            ->setParameter('reviewKey', $reviewKey)
+            ->orderBy('review.id', 'DESC')
+            ->setMaxResults(12);
+
+        if ($viewer instanceof PublicUser) {
+            $qb
+                ->andWhere('review.status = :published OR review.publicUser = :viewer')
+                ->setParameter('published', PublicUserReview::STATUS_PUBLISHED)
+                ->setParameter('viewer', $viewer);
+        } else {
+            $qb
+                ->andWhere('review.status = :published')
+                ->setParameter('published', PublicUserReview::STATUS_PUBLISHED);
+        }
+
+        return array_map(
+            static fn (PublicUserReview $review): array => $review->toPayload($viewer),
+            $qb->getQuery()->getResult(),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $location
+     */
+    private function reviewKeyForLocation(array $location): ?string
+    {
+        if (($location['source_type'] ?? null) === PublicUserReview::SOURCE_GOOGLE_PLACES) {
+            $externalSourceKey = trim((string) ($location['external_source_key'] ?? $location['place_id'] ?? ''));
+
+            return $externalSourceKey !== ''
+                ? PublicUserReview::reviewKeyFor(PublicUserReview::SOURCE_GOOGLE_PLACES, $externalSourceKey)
+                : null;
+        }
+
+        $locationId = $location['location_id'] ?? null;
+        if (!is_numeric($locationId)) {
+            return null;
+        }
+
+        return PublicUserReview::reviewKeyFor(PublicUserReview::SOURCE_CANONICAL, (string) (int) $locationId);
     }
 
     #[Route('/l/{locationRef}/qr.svg', name: 'public_location_profile_qr', methods: ['GET'])]

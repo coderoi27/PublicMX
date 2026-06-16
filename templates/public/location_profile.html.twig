@@ -28,6 +28,7 @@
     {% set photo = location.photo_url ?? location.category_cover_photo_url ?? location.category_default_photo_url ?? null %}
     {% set rating = location.rating ?? null %}
     {% set reviews = location.user_rating_count ?? location.user_ratings_total ?? null %}
+    {% set own_review_count = own_reviews|default([])|length %}
     {% set is_open = location.open_now is defined and location.open_now is same as(true) %}
     {% set is_closed = location.open_now is defined and location.open_now is same as(false) %}
     {% set hours = location.opening_hours_text is defined and location.opening_hours_text is iterable ? location.opening_hours_text : [] %}
@@ -93,7 +94,11 @@
                 <div class="location-profile__stats">
                     <div>
                         <strong>{{ rating ? rating|number_format(1) : 'N/D' }}</strong>
-                        <span>{{ reviews ? reviews ~ ' reseñas' : 'Sin reseñas' }}</span>
+                        <span>{{ reviews ? reviews ~ ' reseñas Google' : 'Sin rating Google' }}</span>
+                    </div>
+                    <div>
+                        <strong>{{ own_review_count }}</strong>
+                        <span>{{ own_review_count == 1 ? 'reseña Mi Monchis' : 'reseñas Mi Monchis' }}</span>
                     </div>
                     <div class="{{ is_open ? 'location-profile__stat--open' : (is_closed ? 'location-profile__stat--closed' : 'location-profile__stat--pending') }}">
                         <strong class="{{ is_open ? 'is-open' : (is_closed ? 'is-closed' : 'is-pending') }}">{{ is_open ? 'Abierto' : (is_closed ? 'Cerrado' : 'Por confirmar') }}</strong>
@@ -180,6 +185,46 @@
                         </ul>
                     {% else %}
                         <p class="location-profile__empty">Aún no hay horario semanal disponible.</p>
+                    {% endif %}
+                </article>
+
+                <article class="location-profile__card">
+                    <div class="location-profile__section-head">
+                        <h2>Reseñas Mi Monchis</h2>
+                        <p>{{ own_review_count > 0 ? 'Opiniones publicadas por la comunidad.' : 'Aún no hay reseñas propias publicadas.' }}</p>
+                    </div>
+                    {% if own_reviews|default([]) is not empty %}
+                        <div class="location-profile__review-list">
+                            {% for review in own_reviews %}
+                                <article class="location-profile__review">
+                                    <div>
+                                        <strong>{{ review.author.display_name ?? 'Usuario Mi Monchis' }}</strong>
+                                        <span>
+                                            {% for i in 1..5 %}
+                                                {{ i <= review.rating_value|default(0) ? '★' : '☆' }}
+                                            {% endfor %}
+                                        </span>
+                                    </div>
+                                    {% if review.status == 'pending_review' %}
+                                        <small>En revisión</small>
+                                    {% else %}
+                                        <small>Publicada</small>
+                                    {% endif %}
+                                    {% if review.review_body %}
+                                        <p>{{ review.review_body }}</p>
+                                    {% endif %}
+                                    {% if review.media|default([]) is not empty %}
+                                        <div class="location-profile__review-media">
+                                            {% for media in review.media|slice(0, 3) %}
+                                                <img src="{{ media.thumbnail_url ?: media.storage_url }}" alt="" loading="lazy">
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="location-profile__empty">Sé la primera persona en contar cómo estuvo este antojo desde el mapa.</p>
                     {% endif %}
                 </article>
 

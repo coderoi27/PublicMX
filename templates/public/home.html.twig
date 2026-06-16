@@ -27,6 +27,7 @@
             data-map-shell-me-url-value="{% if is_authenticated %}{{ path('public_api_me') }}{% endif %}"
             data-map-shell-favorites-url-value="{% if is_authenticated %}{{ path('public_api_favorites_collection') }}{% endif %}"
             data-map-shell-addresses-url-value="{% if is_authenticated %}{{ path('public_api_addresses_collection') }}{% endif %}"
+            data-map-shell-reviews-url-value="{{ path('public_api_reviews_collection') }}"
             data-map-shell-google-maps-api-key-value="{{ google_maps_api_key }}"
             data-map-shell-claim-url-value="{{ path('public_claim_location') }}"
             data-map-shell-event-log-url-value="{{ path('public_api_interactions_log') }}"

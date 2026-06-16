@@ -80,6 +80,7 @@ export default class extends Controller {
         meUrl: String,
         favoritesUrl: String,
         addressesUrl: String,
+        reviewsUrl: String,
         googleMapsApiKey: String,
         claimUrl: String,
         eventLogUrl: String,
@@ -4407,7 +4408,10 @@ export default class extends Controller {
             source_type: sourceType,
             location_id: sourceType === 'canonical' && Number.isInteger(locationId) ? locationId : null,
             external_source_key: sourceType === 'google_places' ? (location.external_source_key ?? location.place_id ?? null) : null,
-            rating: null,
+            review_key: sourceType === 'google_places'
+                ? this.favoriteKeyForSource(sourceType, location.external_source_key ?? location.place_id ?? '')
+                : this.favoriteKeyForSource(sourceType, Number.isInteger(locationId) ? String(locationId) : ''),
+            rating_value: 5,
             body: '',
             media: [],
             status: 'draft',
@@ -4417,22 +4421,55 @@ export default class extends Controller {
     ownReviewEntrypointMarkup(location) {
         const draft = this.ownReviewDraftForLocation(location);
         const entityRef = draft.location_id ?? draft.external_source_key ?? this.locationKey(location);
+        const subjectAttrs = `
+            data-source-type="${this.escapeHtml(draft.source_type)}"
+            data-location-id="${this.escapeHtml(String(draft.location_id ?? ''))}"
+            data-external-source-key="${this.escapeHtml(String(draft.external_source_key ?? ''))}"
+            data-review-key="${this.escapeHtml(draft.review_key)}"
+        `;
+        const formMarkup = this.authenticatedValue ? `
+            <form class="mobile-map-app__own-review-form" data-action="submit->map-shell#submitOwnReview" ${subjectAttrs}>
+                <div class="mobile-map-app__own-review-stars" role="radiogroup" aria-label="Calificación Mi Monchis">
+                    ${[1, 2, 3, 4, 5].map((rating) => `
+                        <label>
+                            <input type="radio" name="rating_value" value="${rating}" ${rating === 5 ? 'checked' : ''}>
+                            <span>${rating}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <label class="mobile-map-app__own-review-field">
+                    <span>Comentario</span>
+                    <textarea name="review_body" rows="3" maxlength="1800" placeholder="¿Qué probaste y cómo estuvo?"></textarea>
+                </label>
+                <label class="mobile-map-app__own-review-field">
+                    <span>Foto</span>
+                    <input type="url" name="media_url" placeholder="https://...">
+                </label>
+                <button type="submit">Publicar reseña</button>
+                <p class="mobile-map-app__own-review-status" data-own-review-form-status></p>
+            </form>
+        ` : `
+            <button
+                type="button"
+                data-action="click->map-shell#startOwnReview"
+                data-source-type="${this.escapeHtml(draft.source_type)}"
+                data-entity-ref="${this.escapeHtml(String(entityRef ?? ''))}"
+            >
+                Iniciar sesión
+            </button>
+        `;
 
         return `
-            <section class="mobile-map-app__own-review">
-                <div>
+            <section class="mobile-map-app__own-review" ${subjectAttrs}>
+                <header>
                     <small>Reseñas Mi Monchis</small>
                     <strong>Tu experiencia, separada del rating de Google</strong>
-                    <p>Primer corte: calificación, comentario y fotos del usuario. Se enviará a moderación antes de publicarse.</p>
+                    <p>Las reseñas propias pasan por moderación antes de publicarse para toda la comunidad.</p>
+                </header>
+                ${formMarkup}
+                <div class="mobile-map-app__own-review-list" data-own-review-list data-review-key="${this.escapeHtml(draft.review_key)}">
+                    <p>Cargando reseñas Mi Monchis...</p>
                 </div>
-                <button
-                    type="button"
-                    data-action="click->map-shell#startOwnReview"
-                    data-source-type="${this.escapeHtml(draft.source_type)}"
-                    data-entity-ref="${this.escapeHtml(String(entityRef ?? ''))}"
-                >
-                    Reseñar
-                </button>
             </section>
         `;
     }
@@ -4450,17 +4487,157 @@ export default class extends Controller {
             return;
         }
 
-        this.setStatus('Primer corte de reseñas listo: falta conectar formulario y endpoint de moderación.');
         this.logInteraction('public_own_review_started', 'location', Number(entityRef) || null, {
             source_type: sourceType,
             entity_ref: entityRef,
-            contract: {
-                rating: '1..5',
-                body: 'string',
-                media: 'image[]',
-                status: 'pending_review',
-            },
+            status: 'login_gate',
         });
+    }
+
+    async submitOwnReview(event) {
+        event.preventDefault();
+
+        if (!this.requireAuthentication({
+                title: 'Inicia sesión para reseñar',
+                copy: 'Las reseñas propias de Mi Monchis quedan ligadas a tu cuenta y pasan por moderación.',
+                status: 'Inicia sesión para reseñar.',
+            })) {
+            return;
+        }
+
+        if (!this.hasReviewsUrlValue || this.reviewsUrlValue === '') {
+            this.setStatus('El endpoint de reseñas no está disponible.');
+            return;
+        }
+
+        const form = event.currentTarget;
+        const status = form.querySelector('[data-own-review-form-status]');
+        const submitButton = form.querySelector('button[type="submit"]');
+        const payload = this.reviewSubjectPayloadFromDataset(form.dataset);
+        const ratingInput = form.querySelector('input[name="rating_value"]:checked');
+        payload.rating_value = Number.parseInt(String(ratingInput?.value ?? '0'), 10);
+        payload.review_body = form.querySelector('[name="review_body"]')?.value.trim() ?? '';
+        const mediaUrl = form.querySelector('[name="media_url"]')?.value.trim() ?? '';
+
+        if (!Number.isInteger(payload.rating_value) || payload.rating_value < 1 || payload.rating_value > 5) {
+            status.textContent = 'Elige una calificación.';
+            return;
+        }
+
+        if (submitButton) {
+            submitButton.disabled = true;
+        }
+        status.textContent = 'Publicando...';
+
+        try {
+            const response = await this.requestJson(this.reviewsUrlValue, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (mediaUrl && response.data?.id) {
+                await this.requestJson(`${this.reviewsUrlValue}/${response.data.id}/media`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ media_type: 'image', storage_url: mediaUrl }),
+                });
+            }
+
+            form.reset();
+            const defaultRating = form.querySelector('input[name="rating_value"][value="5"]');
+            if (defaultRating) {
+                defaultRating.checked = true;
+            }
+            status.textContent = 'Reseña enviada a revisión.';
+            this.setStatus('Reseña Mi Monchis enviada a revisión.');
+            await this.loadOwnReviewsForSubject(form.dataset);
+            this.logInteraction('public_own_review_submitted', 'location', payload.location_id ?? null, {
+                source_type: payload.source_type,
+                review_status: response.data?.status ?? 'pending_review',
+                has_media: mediaUrl !== '',
+            });
+        } catch (error) {
+            status.textContent = error.message;
+            this.setStatus(error.message);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+            }
+        }
+    }
+
+    reviewSubjectPayloadFromDataset(dataset) {
+        const sourceType = this.normalizeFavoriteSource(dataset.sourceType ?? 'canonical');
+        const locationId = Number.parseInt(String(dataset.locationId ?? ''), 10);
+
+        return {
+            source_type: sourceType,
+            location_id: sourceType === 'canonical' && Number.isInteger(locationId) ? locationId : null,
+            external_source_key: sourceType === 'google_places' ? (dataset.externalSourceKey || null) : null,
+        };
+    }
+
+    async loadOwnReviewsForSubject(dataset) {
+        const list = [...(this.detailSheetBodyTarget?.querySelectorAll('[data-own-review-list]') ?? [])]
+            .find((candidate) => candidate.dataset.reviewKey === (dataset.reviewKey ?? ''));
+        if (!list || !this.hasReviewsUrlValue || this.reviewsUrlValue === '') {
+            return;
+        }
+
+        list.innerHTML = '<p>Cargando reseñas Mi Monchis...</p>';
+        const payload = this.reviewSubjectPayloadFromDataset(dataset);
+        const url = new URL(this.reviewsUrlValue, window.location.origin);
+        url.searchParams.set('source_type', payload.source_type);
+        if (payload.location_id !== null) {
+            url.searchParams.set('location_id', String(payload.location_id));
+        }
+        if (payload.external_source_key) {
+            url.searchParams.set('external_source_key', payload.external_source_key);
+        }
+
+        try {
+            const response = await this.requestJson(url.toString(), { method: 'GET' });
+            const reviews = Array.isArray(response.data) ? response.data : [];
+            list.innerHTML = this.ownReviewsListMarkup(reviews);
+        } catch (error) {
+            list.innerHTML = `<p class="is-error">${this.escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    ownReviewsListMarkup(reviews) {
+        if (reviews.length === 0) {
+            return '<p>Aún no hay reseñas Mi Monchis para este lugar.</p>';
+        }
+
+        return reviews.map((review) => {
+            const status = review.status === 'published' ? 'Publicada' : 'En revisión';
+            const media = Array.isArray(review.media) ? review.media.slice(0, 3) : [];
+
+            return `
+                <article class="mobile-map-app__own-review-item">
+                    <div>
+                        <strong>${this.escapeHtml(review.author?.display_name ?? 'Usuario Mi Monchis')}</strong>
+                        <span>${this.escapeHtml(this.starRatingLabel(review.rating_value))}</span>
+                        <small>${this.escapeHtml(status)}</small>
+                    </div>
+                    ${review.review_body ? `<p>${this.escapeHtml(review.review_body)}</p>` : ''}
+                    ${media.length > 0 ? `
+                        <div class="mobile-map-app__own-review-media">
+                            ${media.map((item) => {
+                                const url = item.thumbnail_url || item.storage_url || '';
+                                return url ? `<img src="${this.escapeHtml(url)}" alt="" loading="lazy">` : '';
+                            }).join('')}
+                        </div>
+                    ` : ''}
+                </article>
+            `;
+        }).join('');
+    }
+
+    starRatingLabel(value) {
+        const rating = Math.max(0, Math.min(5, Number.parseInt(String(value ?? '0'), 10) || 0));
+        return `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}`;
     }
 
     renderDetailSheet(location) {
@@ -4581,6 +4758,10 @@ export default class extends Controller {
 
         this.detailSheetTarget.classList.remove('is-hidden');
         this.detailSheetTarget.classList.add('is-visible');
+        const reviewSection = this.detailSheetBodyTarget.querySelector('.mobile-map-app__own-review');
+        if (reviewSection?.dataset) {
+            this.loadOwnReviewsForSubject(reviewSection.dataset);
+        }
     }
 
     refreshDetailSheet() {

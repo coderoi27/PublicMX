@@ -91,6 +91,7 @@ export default class extends Controller {
         initialFavorites: Array,
         initialAddresses: Array,
         initialLocationLabel: String,
+        initialLocationSource: String,
         lat: Number,
         lng: Number,
     };
@@ -103,6 +104,7 @@ export default class extends Controller {
             .map((favorite) => Number.parseInt(String(favorite.location_id ?? ''), 10))
             .filter((locationId) => Number.isInteger(locationId));
         this.savedAddresses = Array.isArray(this.initialAddressesValue) ? [...this.initialAddressesValue] : [];
+        this.activeLocationSource = this.hasInitialLocationSourceValue ? this.initialLocationSourceValue : (this.hasUserCoordinates() ? 'server' : 'none');
         this.currentLocations = [];
         this.visibleLocations = [];
         this.currentFeedSource = 'canonical';
@@ -214,7 +216,7 @@ export default class extends Controller {
             const lat = Number(params.get('lat'));
             const lng = Number(params.get('lng'));
             if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                this.applyCoordinates(lat, lng);
+                this.applyCoordinates(lat, lng, { source: 'return_context' });
             }
         }
     }
@@ -237,8 +239,8 @@ export default class extends Controller {
         try {
             this.setStatus('Solicitando geolocalización...');
             const coords = await this.requestGeolocation();
-            this.applyCoordinates(coords.latitude, coords.longitude);
-            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue });
+            this.applyCoordinates(coords.latitude, coords.longitude, { source: 'detected' });
+            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue, source: 'detected' });
             this.setStatus('Ubicación detectada. Refrescando feed...');
             await this.loadFeed();
         } catch (error) {
@@ -251,8 +253,8 @@ export default class extends Controller {
 
         try {
             const coords = await this.requestGeolocation();
-            this.applyCoordinates(coords.latitude, coords.longitude);
-            this.updateHeroLocation('Ubicación actual');
+            this.applyCoordinates(coords.latitude, coords.longitude, { source: 'detected' });
+            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue, source: 'detected' });
             await this.completeWalkthrough();
             await this.loadFeed();
             this.refreshMapViewport();
@@ -275,8 +277,8 @@ export default class extends Controller {
 
         try {
             const selection = await this.resolveWalkthroughSelection(address);
-            this.applyCoordinates(selection.lat, selection.lng);
-            this.updateHeroLocation(selection.label);
+            this.applyCoordinates(selection.lat, selection.lng, { source: 'typed' });
+            this.updateHeroLocation(selection.label, { persist: !this.authenticatedValue, source: 'typed' });
             this.walkthroughSelection = selection;
             this.hideWalkthroughSuggestions();
             await this.completeWalkthrough();
@@ -533,8 +535,8 @@ export default class extends Controller {
 
     async selectSavedAddress(event) {
         const { lat, lng, label } = event.currentTarget.dataset;
-        this.applyCoordinates(Number(lat), Number(lng));
-        this.updateHeroLocation(label);
+        this.applyCoordinates(Number(lat), Number(lng), { source: 'saved_address' });
+        this.updateHeroLocation(label, { source: 'saved_address' });
         this.setStatus(`Explorando cerca de ${label}.`);
         await this.loadFeed();
         this.activeSection = 'explore';
@@ -982,13 +984,7 @@ export default class extends Controller {
         }
 
         try {
-            const response = await fetch(url.toString(), {
-                headers: {
-                    Accept: 'application/json',
-                },
-            });
-
-            const payload = await response.json();
+            const payload = await this.requestJson(url.toString(), { method: 'GET' });
             this.registerCategoryCatalog(payload.meta?.category_catalog ?? []);
             this.registerMapSettings(payload.meta?.settings?.map ?? {});
             this.registerGooglePlacesSettings(payload.meta?.settings?.google_places_proxy ?? {});
@@ -2855,7 +2851,7 @@ export default class extends Controller {
         });
     }
 
-    applyCoordinates(latitude, longitude) {
+    applyCoordinates(latitude, longitude, options = {}) {
         if (this.hasAddressLatInputTarget) {
             this.addressLatInputTarget.value = Number(latitude).toFixed(6);
         }
@@ -2865,6 +2861,9 @@ export default class extends Controller {
 
         this.latValue = Number(latitude);
         this.lngValue = Number(longitude);
+        if (options.source) {
+            this.activeLocationSource = String(options.source);
+        }
         this.pendingViewportCenter = this.hasUserCoordinates() ? this.currentUserPosition() : null;
     }
 
@@ -2931,7 +2930,7 @@ export default class extends Controller {
         if (label) {
             this.currentLocationLabel = displayLabel;
             if (options.persist !== false) {
-                this.persistLocationContext();
+                this.persistLocationContext(options.source ?? this.activeLocationSource ?? 'manual');
             }
         }
     }
@@ -3721,16 +3720,21 @@ export default class extends Controller {
         }
     }
 
-    persistLocationContext() {
+    persistLocationContext(source = 'manual') {
         if (!this.hasUserCoordinates()) {
             return;
         }
 
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
         const payload = {
+            version: 2,
             lat: Number(this.latValue.toFixed(6)),
             lng: Number(this.lngValue.toFixed(6)),
             label: this.currentLocationLabel || 'Ubicación actual',
+            source,
             updated_at: new Date().toISOString(),
+            expires_at: expiresAt.toISOString(),
         };
 
         try {
@@ -3752,6 +3756,7 @@ export default class extends Controller {
         if (hasServerCoordinates) {
             const initialLabel = this.hasInitialLocationLabelValue ? this.initialLocationLabelValue : '';
             this.currentLocationLabel = initialLabel || 'Ubicación actual';
+            this.activeLocationSource = this.hasInitialLocationSourceValue ? this.initialLocationSourceValue : 'server';
             this.updateHeroLocation(this.currentLocationLabel, { persist: false });
             return;
         }
@@ -3764,14 +3769,16 @@ export default class extends Controller {
             persistedContext = null;
         }
 
-        if (
-            !hasServerCoordinates
-            && persistedContext
-            && Number.isFinite(Number(persistedContext.lat))
-            && Number.isFinite(Number(persistedContext.lng))
-        ) {
+        if (!this.validPersistedLocationContext(persistedContext)) {
+            this.clearPersistedLocationContext();
+            this.persistPrimarySavedAddressContext();
+            return;
+        }
+
+        if (!hasServerCoordinates) {
             this.latValue = Number(persistedContext.lat);
             this.lngValue = Number(persistedContext.lng);
+            this.activeLocationSource = String(persistedContext.source ?? 'restored');
         }
 
         if (persistedContext?.label) {
@@ -3781,6 +3788,31 @@ export default class extends Controller {
         }
 
         this.persistPrimarySavedAddressContext();
+    }
+
+    validPersistedLocationContext(context) {
+        if (
+            !context
+            || !Number.isFinite(Number(context.lat))
+            || !Number.isFinite(Number(context.lng))
+        ) {
+            return false;
+        }
+
+        if (!context.expires_at) {
+            return true;
+        }
+
+        const expiresAt = new Date(context.expires_at);
+        return !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > Date.now();
+    }
+
+    clearPersistedLocationContext() {
+        try {
+            window.localStorage.removeItem('mi_monchis_location_context');
+        } catch (error) {
+            // Ignore storage failures in demo mode.
+        }
     }
 
     persistPrimarySavedAddressContext() {
@@ -3798,8 +3830,9 @@ export default class extends Controller {
 
         this.latValue = Number(address.latitude);
         this.lngValue = Number(address.longitude);
+        this.activeLocationSource = 'saved_address';
         this.currentLocationLabel = address.label || 'Mi ubi guardada';
-        this.updateHeroLocation(this.currentLocationLabel, { persist: true });
+        this.updateHeroLocation(this.currentLocationLabel, { persist: true, source: 'saved_address' });
     }
 
     async afterLayoutSettles() {

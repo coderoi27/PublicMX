@@ -77,11 +77,13 @@ final class HomeController extends AbstractController
         $effectiveLat = is_numeric((string) $queryLat) ? (float) $queryLat : null;
         $effectiveLng = is_numeric((string) $queryLng) ? (float) $queryLng : null;
         $effectiveLocationLabel = null;
+        $effectiveLocationSource = ($effectiveLat !== null && $effectiveLng !== null) ? 'query' : null;
 
         if (($effectiveLat === null || $effectiveLng === null) && $primaryAddress instanceof PublicUserAddress) {
             $effectiveLat = is_numeric((string) $primaryAddress->getLatitude()) ? (float) $primaryAddress->getLatitude() : null;
             $effectiveLng = is_numeric((string) $primaryAddress->getLongitude()) ? (float) $primaryAddress->getLongitude() : null;
             $effectiveLocationLabel = $primaryAddress->getLabel();
+            $effectiveLocationSource = ($effectiveLat !== null && $effectiveLng !== null) ? 'saved_address' : null;
         }
 
         $feed = $coreFeedClient->fetchLocations($effectiveLat, $effectiveLng);
@@ -92,6 +94,7 @@ final class HomeController extends AbstractController
             'query_lat' => $effectiveLat,
             'query_lng' => $effectiveLng,
             'initial_location_label' => $effectiveLocationLabel,
+            'initial_location_source' => $effectiveLocationSource,
             'current_user' => $user instanceof PublicUser ? $user : null,
             'favorite_location_ids' => $favoriteLocationIds,
             'favorite_items' => $favoriteItems,

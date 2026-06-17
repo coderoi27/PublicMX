@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Mi Monchis MX{% endblock %}
+{% block title %}{{ branding.default_meta_title|default('Mi Monchis MX') }}{% endblock %}
 
 {% block body %}
     {% set branding = branding|default({
@@ -9,6 +9,16 @@
         logo_url: '/images/branding/logo-simple-vertical.png',
         logo_horizontal_url: '/images/mi-monchis-horizontal.png',
         icon_url: '/images/mi-monchis-cuadrado.png',
+        favicon_url: '/images/mi-monchis-cuadrado.png',
+        theme_color: '#F27F0D',
+        default_meta_title: 'Mi Monchis MX',
+        default_meta_description: 'Explora locales, antojitos y lugares cercanos en Mi Monchis MX.',
+        social_share: {
+            title: 'Mi Monchis MX',
+            description: 'Explora locales y antojos cercanos en Mi Monchis MX.',
+            image_url: '/images/mi-monchis-cuadrado.png',
+            twitter_card: 'summary_large_image'
+        },
         copyright: '© 2026 Mi Monchis. Hecho con antojo.'
     }) %}
     {% set is_authenticated = current_user is not null %}
@@ -44,6 +54,7 @@
             data-map-shell-initial-favorites-value='{{ favorite_items|default([])|json_encode|raw }}'
             data-map-shell-initial-addresses-value='{{ saved_addresses|json_encode|raw }}'
             {% if initial_location_label is defined and initial_location_label is not empty %}data-map-shell-initial-location-label-value="{{ initial_location_label }}"{% endif %}
+            {% if initial_location_source is defined and initial_location_source is not empty %}data-map-shell-initial-location-source-value="{{ initial_location_source }}"{% endif %}
             {% if query_lat is not empty %}data-map-shell-lat-value="{{ query_lat }}"{% endif %}
             {% if query_lng is not empty %}data-map-shell-lng-value="{{ query_lng }}"{% endif %}
         >

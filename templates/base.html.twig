@@ -1,16 +1,44 @@
 <!DOCTYPE html>
 <html lang="es" class="{% block html_class %}{% endblock %}">
     <head>
+        {% set base_branding = branding|default({
+            app_name: 'Mi Monchis MX',
+            short_name: 'Mi Monchis',
+            logo_url: '/images/branding/logo-simple-vertical.png',
+            logo_horizontal_url: '/images/mi-monchis-horizontal.png',
+            icon_url: '/images/mi-monchis-cuadrado.png',
+            favicon_url: '/images/mi-monchis-cuadrado.png',
+            theme_color: '#F27F0D',
+            default_meta_title: 'Mi Monchis MX',
+            default_meta_description: 'Explora locales, antojitos y lugares cercanos en Mi Monchis MX.',
+            social_share: {
+                title: 'Mi Monchis MX',
+                description: 'Explora locales y antojos cercanos en Mi Monchis MX.',
+                image_url: '/images/mi-monchis-cuadrado.png',
+                twitter_card: 'summary_large_image'
+            },
+            copyright: '© 2026 Mi Monchis. Hecho con antojo.'
+        }) %}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        <meta name="theme-color" content="#F27F0D">
-        {% block meta %}{% endblock %}
-        <title>{% block title %}Mi Monchis - Alpha{% endblock %}</title>
+        <meta name="theme-color" content="{{ base_branding.theme_color|default('#F27F0D') }}">
+        {% block meta %}
+            <meta name="description" content="{{ base_branding.default_meta_description|e('html_attr') }}">
+            <meta property="og:type" content="website">
+            <meta property="og:title" content="{{ base_branding.social_share.title|default(base_branding.default_meta_title)|e('html_attr') }}">
+            <meta property="og:description" content="{{ base_branding.social_share.description|default(base_branding.default_meta_description)|e('html_attr') }}">
+            <meta property="og:image" content="{{ absolute_url(base_branding.social_share.image_url|default(base_branding.icon_url))|e('html_attr') }}">
+            <meta name="twitter:card" content="{{ base_branding.social_share.twitter_card|default('summary_large_image')|e('html_attr') }}">
+            <meta name="twitter:title" content="{{ base_branding.social_share.title|default(base_branding.default_meta_title)|e('html_attr') }}">
+            <meta name="twitter:description" content="{{ base_branding.social_share.description|default(base_branding.default_meta_description)|e('html_attr') }}">
+            <meta name="twitter:image" content="{{ absolute_url(base_branding.social_share.image_url|default(base_branding.icon_url))|e('html_attr') }}">
+        {% endblock %}
+        <title>{% block title %}{{ base_branding.default_meta_title|default('Mi Monchis MX') }}{% endblock %}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <link rel="icon" href="{{ asset('images/mi-monchis-cuadrado.png') }}" type="image/png">
-        <link rel="apple-touch-icon" href="{{ asset('images/mi-monchis-cuadrado.png') }}">
+        <link rel="icon" href="{{ base_branding.favicon_url|default(base_branding.icon_url) }}" type="image/png">
+        <link rel="apple-touch-icon" href="{{ base_branding.icon_url }}">
         {% block stylesheets %}
         {% endblock %}
 

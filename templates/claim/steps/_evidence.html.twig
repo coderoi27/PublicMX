@@ -1,0 +1,56 @@
+<div class="step-container" data-claim-flow-target="step" data-step-name="evidence" hidden>
+    <h2>Evidencia del Local</h2>
+    <div class="privacy-notice">
+        <strong>Importante:</strong> Este video se utilizará únicamente para verificar tu relación con el local. No se publicará en el perfil del negocio.
+    </div>
+
+    {# El contenedor superior maneja el r2-upload para atrapar el evento emitido por media-recorder #}
+    <div id="evidence-upload-manager"
+         data-controller="r2-upload"
+         data-r2-upload-prepare-url-value="{{ path('app_claim_evidence_prepare') }}"
+         data-r2-upload-complete-url-value="{{ path('app_claim_evidence_complete') }}"
+         data-r2-upload-max-size-bytes-value="{{ max_size_bytes|default(78643200) }}"
+         data-action="claim:evidence-ready->r2-upload#receiveFile claim:evidence-reset->media-recorder#reset">
+        
+        {# Componente de carga y progreso (r2-upload) #}
+        <div class="upload-status" data-r2-upload-target="statusContainer" hidden>
+            <h3 data-r2-upload-target="statusText">Estado...</h3>
+            <progress data-r2-upload-target="progressBar" value="0" max="100"></progress>
+            <p data-r2-upload-target="errorMessage" class="error"></p>
+            <button type="button" data-action="click->r2-upload#retry" data-r2-upload-target="retryButton" hidden>Reintentar carga</button>
+            <button type="button" data-action="click->r2-upload#cancel" data-r2-upload-target="cancelButton" hidden>Cancelar</button>
+            <button type="button" data-action="click->claim-flow#nextStep" data-r2-upload-target="continueButton" hidden>Continuar al siguiente paso</button>
+        </div>
+
+        {# Componente de grabación (media-recorder) #}
+        <div data-controller="media-recorder"
+             data-media-recorder-max-duration-seconds-value="{{ max_duration|default(90) }}"
+             data-r2-upload-target="recorderContainer">
+            
+            <div data-media-recorder-target="idleState">
+                <p>Duración máxima permitida: {{ max_duration|default(90) }} segundos.</p>
+                <button type="button" data-action="click->media-recorder#requestCamera">Grabar video (cámara)</button>
+                <p>O usa el método alternativo:</p>
+                <input type="file" accept="video/webm,video/mp4,video/quicktime,video/*" capture="environment" data-action="change->media-recorder#handleFileSelection">
+            </div>
+
+            <div data-media-recorder-target="permissionState" hidden>
+                <p>Permite el acceso a tu cámara para continuar...</p>
+            </div>
+
+            <div data-media-recorder-target="recordingState" hidden>
+                <video data-media-recorder-target="liveVideo" playsinline muted autoplay></video>
+                <p class="recording-indicator">Grabando... <span data-media-recorder-target="timer">0</span>s</p>
+                <button type="button" data-action="click->media-recorder#stopRecording">Detener y usar</button>
+                <button type="button" data-action="click->media-recorder#cancelRecording">Cancelar grabación</button>
+            </div>
+
+            <div data-media-recorder-target="previewState" hidden>
+                <video data-media-recorder-target="previewVideo" playsinline controls></video>
+                <button type="button" data-action="click->media-recorder#dispatchFile">Subir evidencia</button>
+                <button type="button" data-action="click->media-recorder#reset">Grabar de nuevo / Cambiar archivo</button>
+            </div>
+
+        </div>
+    </div>
+</div>

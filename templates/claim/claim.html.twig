@@ -1,0 +1,35 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Verificar Negocio - Mi Monchis MX{% endblock %}
+
+{% block body %}
+<main class="claim-flow-container">
+    <div id="claim-wizard"
+         data-controller="claim-flow"
+         data-claim-uuid="{{ claim_uuid|default('') }}"
+         data-email-verified="{{ email_verified|default(false) ? 'true' : 'false' }}"
+         data-claim-status="{{ claim_status|default('draft') }}"
+         data-has-token="{{ has_token|default(false) ? 'true' : 'false' }}"
+         data-csrf-token="{{ csrf_token|default('') }}">
+         
+        {% if state == 'wizard' %}
+            <div class="claim-header">
+                <h1>Verificación de Negocio</h1>
+                {% include 'claim/_progress.html.twig' %}
+            </div>
+
+            <div class="claim-steps-container">
+                {% include 'claim/steps/_confirm_location.html.twig' %}
+                {% include 'claim/steps/_claimant.html.twig' %}
+                {% include 'claim/steps/_otp.html.twig' %}
+                {% include 'claim/steps/_evidence.html.twig' %}
+                {% include 'claim/steps/_legal.html.twig' %}
+                {% include 'claim/steps/_summary.html.twig' %}
+            </div>
+        {% elseif state == 'submitted' %}
+            {% include 'claim/steps/_confirmation.html.twig' %}
+        {% endif %}
+        
+    </div>
+</main>
+{% endblock %}

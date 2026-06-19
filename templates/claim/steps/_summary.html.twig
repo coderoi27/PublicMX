@@ -1,0 +1,23 @@
+<div id="claim-step-summary" class="claim-step hidden" data-controller="claim-submit" data-claim-flow-target="step" data-step-name="summary">
+    <h2>Revisión Final</h2>
+    <p>Verifica que la información sea correcta antes de enviar.</p>
+
+    <div class="summary-details" style="background: #f9f9f9; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <p><strong>Negocio:</strong> {{ claim_data.place.name ?? 'Cargando...' }}</p>
+        <p><strong>Dirección:</strong> {{ claim_data.place.address ?? 'Cargando...' }}</p>
+        <p><strong>Solicitante:</strong> {{ claim_data.claimant_name ?? 'Cargando...' }}</p>
+        <p><strong>Relación:</strong> {{ claim_data.claimant_role ?? 'Cargando...' }}</p>
+        <p><strong>Correo:</strong> {{ claim_data.email ?? 'Cargando...' }} (Verificado)</p>
+        <p><strong>Teléfono:</strong> {{ claim_data.phone ?? 'Cargando...' }}</p>
+        <p><strong>Evidencia:</strong> {{ claim_data.evidence_status ?? 'Cargando...' }}</p>
+        <p><strong>Aceptación Legal:</strong> Sí</p>
+    </div>
+
+    <input type="hidden" data-claim-submit-target="csrfToken" value="{{ csrf_token }}">
+    
+    <div data-claim-submit-target="statusMessage" class="hidden" style="color: red; margin-bottom: 1rem;"></div>
+
+    <div class="actions">
+        <button data-action="click->claim-submit#submit" data-claim-submit-target="submitButton">Enviar Solicitud</button>
+    </div>
+</div>

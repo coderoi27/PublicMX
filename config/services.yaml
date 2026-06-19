@@ -12,6 +12,12 @@ parameters:
     app.alpha_from_name: '%env(default::PUBLIC_ALPHA_FROM_NAME)%'
     app.alpha_invitation_expiry_days: '%env(int:default::PUBLIC_ALPHA_INVITATION_EXPIRY_DAYS)%'
     app.mailer_dsn: '%env(default::MAILER_DSN)%'
+    
+    # Core API configs for Claim flow
+    app.mi_monchis_core_base_url: '%env(string:MI_MONCHIS_CORE_BASE_URL)%'
+    app.mi_monchis_core_timeout_seconds: '%env(int:MI_MONCHIS_CORE_TIMEOUT_SECONDS)%'
+    app.mi_monchis_core_connect_timeout_seconds: '%env(int:MI_MONCHIS_CORE_CONNECT_TIMEOUT_SECONDS)%'
+    app.claim_legal_acceptance_reference: '%env(string:CLAIM_LEGAL_ACCEPTANCE_REFERENCE)%'
 
 services:
     # default configuration for services in *this* file
@@ -61,5 +67,7 @@ services:
             $googlePlacesApiKey: '%app.google_maps_api_key%'
             $requestStack: '@request_stack'
 
-    # add more service definitions when explicit configuration is needed
-    # please note that last definitions always *replace* previous ones
+    App\Service\Claim\LocationClaimCoreClient:
+        arguments:
+            $coreBaseUrl: '%app.mi_monchis_core_base_url%'
+            $timeout: '%app.mi_monchis_core_timeout_seconds%'

@@ -1,0 +1,27 @@
+<div id="claim-step-legal" class="claim-step hidden">
+    <h2>Aceptación Legal</h2>
+    <p>Por favor revisa y acepta los términos antes de continuar.</p>
+    
+    <form data-action="submit->claim-flow#saveProgress">
+        <input type="hidden" name="last_completed_step" value="legal">
+        
+        <div class="legal-box" style="border: 1px solid #ccc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            <label style="display: flex; gap: 0.5rem; align-items: flex-start; cursor: pointer;">
+                <input type="checkbox" name="legal_accepted" value="true" required style="margin-top: 0.3rem;">
+                <span>
+                    <strong>Declaración de relación legítima</strong><br>
+                    Declaro bajo protesta de decir verdad que soy el propietario o un representante autorizado de este negocio.
+                    Entiendo que la plataforma revisará manualmente la evidencia compartida, que ésta será tratada con privacidad y que podrían contactarme para solicitar información adicional.
+                </span>
+            </label>
+        </div>
+
+        <p style="font-size: 0.85rem; color: #666;">
+            Consulta nuestro <a href="#" target="_blank">Aviso de Privacidad</a> y <a href="#" target="_blank">Términos y Condiciones</a>.
+        </p>
+
+        <div class="actions">
+            <button type="submit">Revisar y Continuar</button>
+        </div>
+    </form>
+</div>

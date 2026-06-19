@@ -1,0 +1,13 @@
+<div class="step-container" data-claim-flow-target="step" data-step-name="otp" hidden>
+    <h2>Verificación de Identidad</h2>
+    <div data-claim-flow-target="otpRequestSection">
+        <p>Enviaremos un código a tu correo para verificar tu identidad.</p>
+        <button data-action="click->claim-flow#requestOtp">Enviar Código</button>
+    </div>
+    <div data-claim-flow-target="otpConfirmSection" hidden>
+        <form data-action="submit->claim-flow#confirmOtp">
+            <label>Código: <input type="text" name="code" required></label>
+            <button type="submit">Verificar</button>
+        </form>
+    </div>
+</div>

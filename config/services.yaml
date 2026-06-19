@@ -38,6 +38,10 @@ services:
         arguments:
             $coreApiBaseUrl: '%app.core_api_base_url%'
 
+    App\Service\Public\BrandingConfigProvider:
+        arguments:
+            $coreApiBaseUrl: '%app.core_api_base_url%'
+
     App\Service\Public\AlphaAccessClient:
         arguments:
             $coreApiBaseUrl: '%app.core_api_base_url%'

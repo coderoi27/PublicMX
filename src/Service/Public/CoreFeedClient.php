@@ -69,6 +69,8 @@ final class CoreFeedClient
         try {
             $response = $this->httpClient->request('GET', rtrim($this->coreApiBaseUrl, '/') . '/api/v1/locations/feed', [
                 'query' => $query,
+                'timeout' => 4.0,
+                'max_duration' => 5.0,
             ]);
 
             /** @var array{data?: array<int, array<string, mixed>>, meta?: array<string, mixed>, errors?: array<int, string>} $payload */

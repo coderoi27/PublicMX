@@ -5,6 +5,8 @@ import './styles/app.css';
 const app = Application.start();
 app.register('cookie-consent', CookieConsentController);
 
+document.documentElement.classList.add('alpha-gate-animations');
+
 const typewriter = document.querySelector('[data-alpha-typewriter]');
 
 if (typewriter) {

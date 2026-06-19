@@ -190,13 +190,13 @@ svg {
     text-align: center;
 }
 
-.alpha-gate .is-presenting {
+.alpha-gate-animations .alpha-gate .is-presenting {
     opacity: 0;
     transform: translateY(14px);
     transition: opacity 360ms ease, transform 360ms ease;
 }
 
-.alpha-gate .is-presenting.is-visible {
+.alpha-gate-animations .alpha-gate .is-presenting.is-visible {
     opacity: 1;
     transform: translateY(0);
 }
@@ -322,12 +322,21 @@ svg {
     border: none;
     border-radius: 999px;
     padding: 0.8rem 1.25rem;
-    background: #f98205;
-    color: #3d230b;
+    background: #15803d;
+    color: #ffffff;
     font-size: 1.05rem;
     font-weight: 800;
     box-shadow: 0 0.85rem 1.35rem rgba(117, 62, 14, 0.14);
     cursor: pointer;
+}
+
+.alpha-gate__submit:hover {
+    background: #166534;
+}
+
+.alpha-gate__submit:focus-visible {
+    outline: 3px solid rgba(21, 128, 61, 0.28);
+    outline-offset: 3px;
 }
 
 .alpha-gate__submit svg {

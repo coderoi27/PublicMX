@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Mi Monchis MX Alpha{% endblock %}
+{% block title %}{{ branding.default_meta_title|default('Mi Monchis MX') }} Alpha{% endblock %}
 {% block html_class %}alpha-gate-document{% endblock %}
 {% block body_class %}alpha-gate-page{% endblock %}
 {% block importmap %}{{ importmap('alpha_gate') }}{% endblock %}

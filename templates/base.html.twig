@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" class="{% block html_class %}{% endblock %}">
     <head>
-        {% set base_branding = branding|default({
+        {% if branding is defined %}
+            {% set base_branding = branding %}
+        {% else %}
+            {% set base_branding = public_branding() %}
+        {% endif %}
+        {% set base_branding = base_branding|default({
             app_name: 'Mi Monchis MX',
             short_name: 'Mi Monchis',
             logo_url: '/images/branding/logo-simple-vertical.png',
@@ -27,17 +32,19 @@
             <meta property="og:type" content="website">
             <meta property="og:title" content="{{ base_branding.social_share.title|default(base_branding.default_meta_title)|e('html_attr') }}">
             <meta property="og:description" content="{{ base_branding.social_share.description|default(base_branding.default_meta_description)|e('html_attr') }}">
+            <meta property="og:site_name" content="{{ base_branding.app_name|e('html_attr') }}">
+            <meta property="og:url" content="{{ app.request.uri|e('html_attr') }}">
             <meta property="og:image" content="{{ absolute_url(base_branding.social_share.image_url|default(base_branding.icon_url))|e('html_attr') }}">
             <meta name="twitter:card" content="{{ base_branding.social_share.twitter_card|default('summary_large_image')|e('html_attr') }}">
-            <meta name="twitter:title" content="{{ base_branding.social_share.title|default(base_branding.default_meta_title)|e('html_attr') }}">
-            <meta name="twitter:description" content="{{ base_branding.social_share.description|default(base_branding.default_meta_description)|e('html_attr') }}">
-            <meta name="twitter:image" content="{{ absolute_url(base_branding.social_share.image_url|default(base_branding.icon_url))|e('html_attr') }}">
+            <meta name="twitter:title" content="{{ base_branding.social_share.twitter_title|default(base_branding.social_share.title|default(base_branding.default_meta_title))|e('html_attr') }}">
+            <meta name="twitter:description" content="{{ base_branding.social_share.twitter_description|default(base_branding.social_share.description|default(base_branding.default_meta_description))|e('html_attr') }}">
+            <meta name="twitter:image" content="{{ absolute_url(base_branding.social_share.twitter_image_url|default(base_branding.social_share.image_url|default(base_branding.icon_url)))|e('html_attr') }}">
         {% endblock %}
         <title>{% block title %}{{ base_branding.default_meta_title|default('Mi Monchis MX') }}{% endblock %}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <link rel="icon" href="{{ base_branding.favicon_url|default(base_branding.icon_url) }}" type="image/png">
+        <link rel="icon" href="{{ base_branding.favicon_url|default(base_branding.icon_url) }}">
         <link rel="apple-touch-icon" href="{{ base_branding.icon_url }}">
         {% block stylesheets %}
         {% endblock %}

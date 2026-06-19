@@ -240,7 +240,7 @@ export default class extends Controller {
             this.setStatus('Solicitando geolocalización...');
             const coords = await this.requestGeolocation();
             this.applyCoordinates(coords.latitude, coords.longitude, { source: 'detected' });
-            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue, source: 'detected' });
+            this.updateHeroLocation('Ubicación actual', { source: 'detected' });
             this.setStatus('Ubicación detectada. Refrescando feed...');
             await this.loadFeed();
         } catch (error) {
@@ -254,7 +254,7 @@ export default class extends Controller {
         try {
             const coords = await this.requestGeolocation();
             this.applyCoordinates(coords.latitude, coords.longitude, { source: 'detected' });
-            this.updateHeroLocation('Ubicación actual', { persist: !this.authenticatedValue, source: 'detected' });
+            this.updateHeroLocation('Ubicación actual', { source: 'detected' });
             await this.completeWalkthrough();
             await this.loadFeed();
             this.refreshMapViewport();
@@ -278,7 +278,7 @@ export default class extends Controller {
         try {
             const selection = await this.resolveWalkthroughSelection(address);
             this.applyCoordinates(selection.lat, selection.lng, { source: 'typed' });
-            this.updateHeroLocation(selection.label, { persist: !this.authenticatedValue, source: 'typed' });
+            this.updateHeroLocation(selection.label, { source: 'typed' });
             this.walkthroughSelection = selection;
             this.hideWalkthroughSuggestions();
             await this.completeWalkthrough();
@@ -535,6 +535,7 @@ export default class extends Controller {
 
     async selectSavedAddress(event) {
         const { lat, lng, label } = event.currentTarget.dataset;
+        this.clearPersistedLocationContext(window.sessionStorage);
         this.applyCoordinates(Number(lat), Number(lng), { source: 'saved_address' });
         this.updateHeroLocation(label, { source: 'saved_address' });
         this.setStatus(`Explorando cerca de ${label}.`);
@@ -3725,6 +3726,11 @@ export default class extends Controller {
             return;
         }
 
+        if (this.authenticatedValue && source === 'saved_address') {
+            this.clearPersistedLocationContext(window.sessionStorage);
+            return;
+        }
+
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
         const payload = {
@@ -3737,8 +3743,9 @@ export default class extends Controller {
             expires_at: expiresAt.toISOString(),
         };
 
+        const storage = this.authenticatedValue ? window.sessionStorage : window.localStorage;
         try {
-            window.localStorage.setItem('mi_monchis_location_context', JSON.stringify(payload));
+            storage.setItem('mi_monchis_location_context', JSON.stringify(payload));
         } catch (error) {
             // Ignore storage failures in demo mode.
         }
@@ -3753,33 +3760,44 @@ export default class extends Controller {
 
     restorePersistedLocationContext() {
         const hasServerCoordinates = this.hasUserCoordinates();
+        const initialSource = this.hasInitialLocationSourceValue ? this.initialLocationSourceValue : null;
+
+        if (this.authenticatedValue && initialSource !== 'query' && initialSource !== 'return_context') {
+            const temporaryContext = this.readPersistedLocationContext(window.sessionStorage);
+            if (this.validPersistedLocationContext(temporaryContext)) {
+                this.applyCoordinates(Number(temporaryContext.lat), Number(temporaryContext.lng), {
+                    source: String(temporaryContext.source ?? 'temporary'),
+                });
+                this.currentLocationLabel = String(temporaryContext.label ?? 'Ubicación temporal');
+                this.updateHeroLocation(this.currentLocationLabel, { persist: false });
+                return;
+            }
+
+            this.clearPersistedLocationContext(window.sessionStorage);
+        }
+
         if (hasServerCoordinates) {
             const initialLabel = this.hasInitialLocationLabelValue ? this.initialLocationLabelValue : '';
             this.currentLocationLabel = initialLabel || 'Ubicación actual';
-            this.activeLocationSource = this.hasInitialLocationSourceValue ? this.initialLocationSourceValue : 'server';
-            this.updateHeroLocation(this.currentLocationLabel, { persist: false });
+            this.activeLocationSource = initialSource ?? 'server';
+            this.updateHeroLocation(this.currentLocationLabel, {
+                persist: !this.authenticatedValue && initialSource === 'query',
+                source: initialSource ?? 'server',
+            });
             return;
         }
 
-        let persistedContext = null;
-
-        try {
-            persistedContext = JSON.parse(window.localStorage.getItem('mi_monchis_location_context') ?? 'null');
-        } catch (error) {
-            persistedContext = null;
-        }
+        const persistedContext = this.readPersistedLocationContext(window.localStorage);
 
         if (!this.validPersistedLocationContext(persistedContext)) {
-            this.clearPersistedLocationContext();
+            this.clearPersistedLocationContext(window.localStorage);
             this.persistPrimarySavedAddressContext();
             return;
         }
 
-        if (!hasServerCoordinates) {
-            this.latValue = Number(persistedContext.lat);
-            this.lngValue = Number(persistedContext.lng);
-            this.activeLocationSource = String(persistedContext.source ?? 'restored');
-        }
+        this.applyCoordinates(Number(persistedContext.lat), Number(persistedContext.lng), {
+            source: String(persistedContext.source ?? 'restored'),
+        });
 
         if (persistedContext?.label) {
             this.currentLocationLabel = String(persistedContext.label);
@@ -3791,10 +3809,16 @@ export default class extends Controller {
     }
 
     validPersistedLocationContext(context) {
+        const lat = Number(context?.lat);
+        const lng = Number(context?.lng);
         if (
             !context
-            || !Number.isFinite(Number(context.lat))
-            || !Number.isFinite(Number(context.lng))
+            || !Number.isFinite(lat)
+            || !Number.isFinite(lng)
+            || lat < -90
+            || lat > 90
+            || lng < -180
+            || lng > 180
         ) {
             return false;
         }
@@ -3807,9 +3831,17 @@ export default class extends Controller {
         return !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > Date.now();
     }
 
-    clearPersistedLocationContext() {
+    readPersistedLocationContext(storage) {
         try {
-            window.localStorage.removeItem('mi_monchis_location_context');
+            return JSON.parse(storage.getItem('mi_monchis_location_context') ?? 'null');
+        } catch (error) {
+            return null;
+        }
+    }
+
+    clearPersistedLocationContext(storage = window.localStorage) {
+        try {
+            storage.removeItem('mi_monchis_location_context');
         } catch (error) {
             // Ignore storage failures in demo mode.
         }
@@ -3820,8 +3852,9 @@ export default class extends Controller {
             return;
         }
 
-        const address = this.savedAddresses.find((item) => item.is_primary && item.latitude && item.longitude)
-            ?? this.savedAddresses.find((item) => item.latitude && item.longitude)
+        const hasCoordinates = (item) => Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude));
+        const address = this.savedAddresses.find((item) => item.is_primary && hasCoordinates(item))
+            ?? this.savedAddresses.find(hasCoordinates)
             ?? null;
 
         if (!address) {
@@ -3832,7 +3865,7 @@ export default class extends Controller {
         this.lngValue = Number(address.longitude);
         this.activeLocationSource = 'saved_address';
         this.currentLocationLabel = address.label || 'Mi ubi guardada';
-        this.updateHeroLocation(this.currentLocationLabel, { persist: true, source: 'saved_address' });
+        this.updateHeroLocation(this.currentLocationLabel, { persist: false, source: 'saved_address' });
     }
 
     async afterLayoutSettles() {
